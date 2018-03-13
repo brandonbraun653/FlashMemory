@@ -1,3 +1,6 @@
 #include "at45db081.hpp"
 
-//Do stuff.
+namespace AT45DBFlash
+{
+  //Do Stuff
+}

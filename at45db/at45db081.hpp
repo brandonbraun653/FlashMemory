@@ -8,17 +8,19 @@
 /* Supporting Includes */
 #include "at45db081_definitions.hpp"
 
-class AT45DB
+namespace AT45DBFlash
 {
-public:
+	class AT45DB
+	{
+	public:
 
 
-	AT45DB() = default;
-	~AT45DB() = default;
+		AT45DB() = default;
+		~AT45DB() = default;
 
-private:
+	private:
 
-};
+	};
 
-
+}
 #endif /* AT45DB081_HPP */

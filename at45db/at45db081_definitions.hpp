@@ -15,7 +15,7 @@ namespace AT45DBFlash
 	/** Available Read Operations
 	* See: Datasheet Section 15
 	*/
-	enum AT45DB_ReadOp
+	enum ReadOp
 	{
 		MAIN_MEM_PAGE_READ	= 0xD2,		/* Main Memory Page Read */
 		CONT_ARR_READ_LP	= 0x01,		/* Continuous Array Read (Low Power Mode) */
@@ -32,7 +32,7 @@ namespace AT45DBFlash
 	/** AVailable Program & Erase Commands
 	* See: Datasheet Section 15
 	*/
-	enum AT45DB_PgmEraseOp
+	enum PgmEraseOp
 	{
 		BUFFER1_WRITE = 0x84,									/* Buffer 1 WRite */
 		BUFFER2_WRITE = 0x87,									/* Buffer 2 WRite */
@@ -56,7 +56,7 @@ namespace AT45DBFlash
 	/** Protection & Security Commands
 	* See: Datasheet Section 15
 	*/
-	enum AT45DB_SecurityOp
+	enum SecurityOp
 	{
 		ENABLE_SECTOR_PROTECTION = (0x3D | 0x2A | 0x7F | 0xA9),			/* Enable Sector Protection */
 		DISABLE_SECTOR_PROTECTION = (0x3D | 0x2A | 0x7F | 0x9A),		/* Disable Sector Protection */
@@ -73,7 +73,7 @@ namespace AT45DBFlash
 	/** Additional Commands
 	* See: Datasheet Section 15
 	*/
-	enum AT45DB_ExtensionOp
+	enum ExtensionOp
 	{
 		MAIN_MEM_PAGE_TO_BUFFER1_TRANSFER = 0x53,					/* Main Memory Page to Buffer 1 Transfer */
 		MAIN_MEM_PAGE_TO_BUFFER2_TRANSFER = 0x55,					/* Main Memory Page to Buffer 2 Transfer */

@@ -34,8 +34,8 @@ namespace AT45DBFlash
 	*/
 	enum AT45DB_PgmEraseOp
 	{
-		BUFFER1_WRITE = 0x84,															/* Buffer 1 WRite */
-		BUFFER2_WRITE = 0x87,															/* Buffer 2 WRite */
+		BUFFER1_WRITE = 0x84,									/* Buffer 1 WRite */
+		BUFFER2_WRITE = 0x87,									/* Buffer 2 WRite */
 		BUFFER1_TO_MAIN_MEM_PAGE_PGM_W_ERASE = 0x83,			/* Buffer 1 to Main Memory Page Program with Built-In Erase */
 		BUFFER2_TO_MAIN_MEM_PAGE_PGM_W_ERASE = 0x86,			/* Buffer 2 to Main Memory Page Program with Build-In Erase */
 		BUFFER1_TO_MAIN_MEM_PAGE_PGM_WO_ERASE = 0x88,			/* Buffer 1 to Main Memory Page Program without Built-In Erase */
@@ -43,14 +43,14 @@ namespace AT45DBFlash
 		MAIN_MEM_PAGE_PGM_THR_BUFFER1_W_ERASE = 0x82,			/* Main Memory Page Program through Buffer 1 with Built-In Erase */
 		MAIN_MEM_PAGE_PGM_THR_BUFFER2_W_ERASE = 0x85,			/* Main Memory Page Program through Buffer 2 with Built-In Erase */
 		MAIN_MEM_BP_PGM_THR_BUFFER1_WO_ERASE = 0x02,			/* Main Memory Byte/Page Program through Buffer 1 without Built-In Erase */
-		PAGE_ERASE = 0x81,																/* Page Erase */
-		BLOCK_ERASE = 0x50,																/* Block Erase */
-		SECTOR_ERASE = 0x7C,															/* Sector Erase */
-		CHIP_ERASE = (0xC7 | 0x94 | 0x80 | 0x9A),					/* Chip Erase */
-		PGM_OR_ERASE_SUSPEND = 0xB0,											/* Program/Erase Suspend */
-		PGM_OR_ERASE_RESUME = 0xD0,												/* Program/Erase Suspend */
-		RMW_THR_BUFFER1 = 0x58,														/* Read-Modify-Write through Buffer 1 */
-		RMW_THR_BUFFER2 = 0x59														/* Read-Modify-Write through Buffer 2 */
+		PAGE_ERASE = 0x81,										/* Page Erase */
+		BLOCK_ERASE = 0x50,										/* Block Erase */
+		SECTOR_ERASE = 0x7C,									/* Sector Erase */
+		CHIP_ERASE = (0xC7 | 0x94 | 0x80 | 0x9A),				/* Chip Erase */
+		PGM_OR_ERASE_SUSPEND = 0xB0,							/* Program/Erase Suspend */
+		PGM_OR_ERASE_RESUME = 0xD0,								/* Program/Erase Suspend */
+		RMW_THR_BUFFER1 = 0x58,									/* Read-Modify-Write through Buffer 1 */
+		RMW_THR_BUFFER2 = 0x59									/* Read-Modify-Write through Buffer 2 */
 	};
 
 	/** Protection & Security Commands
@@ -58,16 +58,16 @@ namespace AT45DBFlash
 	*/
 	enum AT45DB_SecurityOp
 	{
-		ENABLE_SECTOR_PROTECTION = (0x3D | 0x2A | 0x7F | 0xA9),				/* Enable Sector Protection */
-		DISABLE_SECTOR_PROTECTION = (0x3D | 0x2A | 0x7F | 0x9A),			/* Disable Sector Protection */
+		ENABLE_SECTOR_PROTECTION = (0x3D | 0x2A | 0x7F | 0xA9),			/* Enable Sector Protection */
+		DISABLE_SECTOR_PROTECTION = (0x3D | 0x2A | 0x7F | 0x9A),		/* Disable Sector Protection */
 		ERASE_SECTOR_PROTECTION_REG = (0x3D | 0x2A | 0x7F | 0xCF),		/* Erase Sector Protection Register */
-		PGM_SECTOR_PROTECTION_REG = (0x3D | 0x2A | 0x7F | 0xFC),			/* Program Sector Protection Register */
-		READ_SECTOR_PROTECTION_REG = 0x32,														/* Read Sector Protection Register */
-		SECTOR_LOCKDOWN = (0x3D | 0x2A | 0x7F | 0x30),								/* Sector Lockdown */
-		READ_SECTOR_LOCKDOWN_REG = 0x35,															/* Read Sector Lockdown Register */
-		FREEZE_SECTOR_LOCKDOWN = (0x34 | 0x55 | 0xAA | 0x40),					/* Freeze Sector Lockdown */
-		PGM_SECURITY_REGISTER = (0x9B | 0x00 | 0x00 | 0x00),					/* Program Security Register */
-		READ_SECURITY_REGISTER = 0x77																	/* Read Security Register */
+		PGM_SECTOR_PROTECTION_REG = (0x3D | 0x2A | 0x7F | 0xFC),		/* Program Sector Protection Register */
+		READ_SECTOR_PROTECTION_REG = 0x32,								/* Read Sector Protection Register */
+		SECTOR_LOCKDOWN = (0x3D | 0x2A | 0x7F | 0x30),					/* Sector Lockdown */
+		READ_SECTOR_LOCKDOWN_REG = 0x35,								/* Read Sector Lockdown Register */
+		FREEZE_SECTOR_LOCKDOWN = (0x34 | 0x55 | 0xAA | 0x40),			/* Freeze Sector Lockdown */
+		PGM_SECURITY_REGISTER = (0x9B | 0x00 | 0x00 | 0x00),			/* Program Security Register */
+		READ_SECURITY_REGISTER = 0x77									/* Read Security Register */
 	};
 
 	/** Additional Commands
@@ -75,20 +75,20 @@ namespace AT45DBFlash
 	*/
 	enum AT45DB_ExtensionOp
 	{
-		MAIN_MEM_PAGE_TO_BUFFER1_TRANSFER = 0x53,									/* Main Memory Page to Buffer 1 Transfer */
-		MAIN_MEM_PAGE_TO_BUFFER2_TRANSFER = 0x55,									/* Main Memory Page to Buffer 2 Transfer */
-		MAIN_MEM_PAGE_TO_BUFFER1_COMPARE = 0x60,									/* Main Memory Page to Buffer 1 Compare */
-		MAIN_MEM_PAGE_TO_BUFFER2_COMPARE = 0x61,									/* Main Memory Page to Buffer 2 Compare */
-		AUTO_PAGE_REWRITE1 = 0x58,																/* Auto Page Rewrite */
-		AUTO_PAGE_REWRITE2 = 0X59,																/* Auto Page Rewrite */
-		DEEP_POWER_DOWN = 0xB9,																		/* Deep Power Down */
-		RESUME_FROM_DEEP_POWER_DOWN = 0xAB,												/* Resume From Deep Power Down */
-		ULTRA_DEEP_POWER_DOWN = 0x79,															/* Ultra-Deep Power Down */
-		STATUS_REGISTER_READ = 0xD7,															/* Status Register Read */
-		READ_DEVICE_INFO = 0x9F,																	/* Manufacturer and Device ID Read */
-		CFG_PWR_2_PAGE_SIZE = (0x3D | 0x2A | 0x80 | 0xA6),				/* Configure "Power of 2" (Binary) Page Size */
+		MAIN_MEM_PAGE_TO_BUFFER1_TRANSFER = 0x53,					/* Main Memory Page to Buffer 1 Transfer */
+		MAIN_MEM_PAGE_TO_BUFFER2_TRANSFER = 0x55,					/* Main Memory Page to Buffer 2 Transfer */
+		MAIN_MEM_PAGE_TO_BUFFER1_COMPARE = 0x60,					/* Main Memory Page to Buffer 1 Compare */
+		MAIN_MEM_PAGE_TO_BUFFER2_COMPARE = 0x61,					/* Main Memory Page to Buffer 2 Compare */
+		AUTO_PAGE_REWRITE1 = 0x58,									/* Auto Page Rewrite */
+		AUTO_PAGE_REWRITE2 = 0X59,									/* Auto Page Rewrite */
+		DEEP_POWER_DOWN = 0xB9,										/* Deep Power Down */
+		RESUME_FROM_DEEP_POWER_DOWN = 0xAB,							/* Resume From Deep Power Down */
+		ULTRA_DEEP_POWER_DOWN = 0x79,								/* Ultra-Deep Power Down */
+		STATUS_REGISTER_READ = 0xD7,								/* Status Register Read */
+		READ_DEVICE_INFO = 0x9F,									/* Manufacturer and Device ID Read */
+		CFG_PWR_2_PAGE_SIZE = (0x3D | 0x2A | 0x80 | 0xA6),			/* Configure "Power of 2" (Binary) Page Size */
 		CFG_STD_FLASH_PAGE_SIZE = (0x3D | 0x2A | 0x80 | 0xA7),		/* Configure Standard DataFlash Page Size */
-		SOFTWARE_RESET = (0xF0 | 0x00 | 0x00 | 0x00)							/* Software Reset */
+		SOFTWARE_RESET = (0xF0 | 0x00 | 0x00 | 0x00)				/* Software Reset */
 	};
 
 	/** Informs the user about the type of chip in use

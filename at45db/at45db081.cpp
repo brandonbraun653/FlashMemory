@@ -20,22 +20,52 @@ namespace Adesto
 			setup.clockMode = MODE0;
 			setup.dataSize = DATASIZE_8BIT;
 			setup.mode = MASTER;
+
+
+			memset(cmdBuffer, 0, SIZE_OF_ARRAY(cmdBuffer));
 		}
 
 		bool AT45::initialize(uint32_t clockFreq)
 		{
 			if (spi->begin(setup) != SPI_OK)
 				return false;
+
+			uint8_t data[30];
+			memset(data, 0, SIZE_OF_ARRAY(data));
+			executeCMD(READ_DEVICE_INFO, data, 30);
+
 			
 			
-			uint8_t OPdevID[5] = { 0x9f, 0x00, 0x00, 0x00, 0x00 };
-			uint8_t data[5] = { 0x00, 0x00, 0x00, 0x00, 0x00 };
+			#if defined(USING_FREERTOS)
+			spi->setMode(TXRX, BLOCKING);
+			//spi->attachThreadTrigger(TX_COMPLETE, &processWakeup);
+			#else			spi->setMode(TXRX, BLOCKING);
+			#endif
 			
-			spi->write(OPdevID, data, 5);
 			
-			memset(data, 0, 5);
 			
 			return true;
+		}
+		
+		AT45xx_DeviceInfo AT45::getDeviceInfo()
+		{
+			return info;
+		}
+		
+		
+		void AT45::readCMD(uint8_t cmd, uint8_t* buff, size_t len)
+		{
+			
+		}
+		
+		void AT45::write8(uint8_t data, bool disableSS)
+		{
+			spi->write(&data, 1, disableSS);
+		}
+		
+		void AT45::write32(uint32_t data, bool disableSS)
+		{
+			//spi->write(&data, 4, disableSS);
 		}
 	}
 }

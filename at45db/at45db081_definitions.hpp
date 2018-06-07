@@ -7,12 +7,42 @@
 
 namespace Adesto
 {
+	const uint8_t JEDEC_CODE = 0x1F;
+	
+	/** Upper 3 MSB of Device ID Byte 1*/
+	enum FamilyCode : uint8_t
+	{
+		AT45Dxxx = 0x01,
+		// Add more as needed
+	};
+	
+	/** Lower 5 LSB of Device ID Byte 1*/
+	enum DensityCode : uint8_t
+	{
+		DENSITY_8MBIT = 0x05,
+		// Add more as needed 
+	};
+	
+	/** Upper 3 MSB of Device ID Byte 2*/
+	enum SubCode : uint8_t 
+	{
+		STANDARD_SERIES = 0x00,
+		// Add more as needed
+	};
+	
+	/** Lower 5 LSB of Device ID Byte 2*/
+	enum ProductVariant : uint8_t
+	{
+		DEFAULT = 0x00,
+		// Add more as needed
+	};
+	
 	namespace NORFlash
 	{
 		/** Available Read Operations
 		 *	See: Datasheet Section 15
 		 **/
-		enum AT45DB_ReadOp
+		enum AT45DB_ReadOp_uint8_t : uint8_t
 		{
 			MAIN_MEM_PAGE_READ						= 0xD2,			/* Main Memory Page Read */
 			CONT_ARR_READ_LP						= 0x01,			/* Continuous Array Read (Low Power Mode) */
@@ -29,7 +59,7 @@ namespace Adesto
 		/** AVailable Program & Erase Commands
 		 *	See: Datasheet Section 15
 		 **/
-		enum AT45DB_PgmEraseOp
+		enum AT45DB_PgmEraseOp_uint8_t : uint8_t
 		{
 			BUFFER1_WRITE							= 0x84,			/* Buffer 1 WRite */
 			BUFFER2_WRITE							= 0x87,			/* Buffer 2 WRite */
@@ -43,46 +73,58 @@ namespace Adesto
 			PAGE_ERASE								= 0x81,			/* Page Erase */
 			BLOCK_ERASE								= 0x50,			/* Block Erase */
 			SECTOR_ERASE							= 0x7C,			/* Sector Erase */
-			CHIP_ERASE								= 0xC794809A,	/* Chip Erase */
 			PGM_OR_ERASE_SUSPEND					= 0xB0,			/* Program/Erase Suspend */
 			PGM_OR_ERASE_RESUME						= 0xD0,			/* Program/Erase Suspend */
 			RMW_THR_BUFFER1							= 0x58,			/* Read-Modify-Write through Buffer 1 */
 			RMW_THR_BUFFER2							= 0x59			/* Read-Modify-Write through Buffer 2 */
 		};
 
+		enum AT45DB_PgmEraseOp_uint32_t : uint32_t
+		{
+			CHIP_ERASE								= 0xC794809A,	/* Chip Erase */
+		};
+
 		/** Protection & Security Commands
 		 *  See: Datasheet Section 15
 		 **/
-		enum AT45DB_SecurityOp
+		enum AT45DB_SecurityOp_uint8_t : uint8_t
+		{	
+			READ_SECTOR_PROTECTION_REG				= 0x32,			/* Read Sector Protection Register */
+			READ_SECTOR_LOCKDOWN_REG				= 0x35,			/* Read Sector Lockdown Register */
+			READ_SECURITY_REGISTER					= 0x77			/* Read Security Register */
+		};
+
+		enum AT45DB_SecurityOp_uint32_t : uint32_t
 		{
 			ENABLE_SECTOR_PROTECTION				= 0x3D2A7FA9,	/* Enable Sector Protection */
 			DISABLE_SECTOR_PROTECTION				= 0x3D2A7F9A,	/* Disable Sector Protection */
 			ERASE_SECTOR_PROTECTION_REG				= 0x3D2A7FCF,	/* Erase Sector Protection Register */
 			PGM_SECTOR_PROTECTION_REG				= 0x3D2A7FFC,	/* Program Sector Protection Register */
-			READ_SECTOR_PROTECTION_REG				= 0x32,			/* Read Sector Protection Register */
 			SECTOR_LOCKDOWN							= 0x3D2A7F30,	/* Sector Lockdown */
-			READ_SECTOR_LOCKDOWN_REG				= 0x35,			/* Read Sector Lockdown Register */
 			FREEZE_SECTOR_LOCKDOWN					= 0x3455AA40,	/* Freeze Sector Lockdown */
 			PGM_SECURITY_REGISTER					= 0x9B000000,	/* Program Security Register */
-			READ_SECURITY_REGISTER					= 0x77			/* Read Security Register */
 		};
 
 		/** Additional Commands
 		 *  See: Datasheet Section 15
 		 **/
-		enum AT45DB_ExtensionOp
+		enum AT45DB_ExtensionOp_uint8_t : uint8_t
 		{
 			MAIN_MEM_PAGE_TO_BUFFER1_TRANSFER		= 0x53,			/* Main Memory Page to Buffer 1 Transfer */
 			MAIN_MEM_PAGE_TO_BUFFER2_TRANSFER		= 0x55,			/* Main Memory Page to Buffer 2 Transfer */
 			MAIN_MEM_PAGE_TO_BUFFER1_COMPARE		= 0x60,			/* Main Memory Page to Buffer 1 Compare */
 			MAIN_MEM_PAGE_TO_BUFFER2_COMPARE		= 0x61,			/* Main Memory Page to Buffer 2 Compare */
 			AUTO_PAGE_REWRITE1						= 0x58,			/* Auto Page Rewrite */
-			AUTO_PAGE_REWRITE2						= 0X59,			/* Auto Page Rewrite */
+			AUTO_PAGE_REWRITE2						= 0x59,			/* Auto Page Rewrite */
 			DEEP_POWER_DOWN							= 0xB9,			/* Deep Power Down */
 			RESUME_FROM_DEEP_POWER_DOWN				= 0xAB,			/* Resume From Deep Power Down */
 			ULTRA_DEEP_POWER_DOWN					= 0x79,			/* Ultra-Deep Power Down */
 			STATUS_REGISTER_READ					= 0xD7,			/* Status Register Read */
 			READ_DEVICE_INFO						= 0x9F,			/* Manufacturer and Device ID Read */
+		};
+
+		enum AT45DB_ExtensionOp_uint32_t : uint32_t
+		{
 			CFG_PWR_2_PAGE_SIZE						= 0x3D2A80A6,	/* Configure "Power of 2" (Binary) Page Size */
 			CFG_STD_FLASH_PAGE_SIZE					= 0x3D2A80A7,	/* Configure Standard DataFlash Page Size */
 			SOFTWARE_RESET							= 0xF0000000	/* Software Reset */
@@ -91,15 +133,13 @@ namespace Adesto
 		/** Informs the user about the type of chip in use
 		 *  See: Datasheet Section 12
 		 **/
-		struct AT45DB_DeviceID
+		struct AT45xx_DeviceInfo
 		{
-			uint8_t manufacturerID = 0;
-			uint16_t deviceID = 0;
-			uint8_t EDI = 0;
-			uint8_t familyCode = 0;
-			uint8_t densityCode = 0;
-			uint8_t subCode = 0;
-			uint8_t productVariant = 0;
+			uint8_t manufacturerID;
+			FamilyCode familyCode;
+			DensityCode densityCode;
+			SubCode subCode;
+			ProductVariant productVariant;
 		};
 	}
 }

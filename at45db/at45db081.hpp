@@ -37,11 +37,45 @@ namespace Adesto
 
 			bool initialize(uint32_t clockFreq);
 
-			
+			AT45xx_DeviceInfo getDeviceInfo();
 
 		private:
 			Chimera::SPI::SPIClass_sPtr spi;	/**< SPI object used for talking with the flash chip */
 			Chimera::SPI::Setup setup;			/**< SPI initialization settings */
+			
+			AT45xx_DeviceInfo info;
+			
+			#if defined(USING_FREERTOS)
+			SemaphoreHandle_t processWakeup;
+			#endif 
+
+			uint8_t cmdBuffer[4];
+			uint8_t emptyBuffer[264];
+			
+			void readCMD(uint8_t cmd, uint8_t* buff, size_t len);
+			
+			void executeCMD(uint8_t* cmd, size_t cmdLen, uint8_t* buff, size_t buffLen)
+			{
+				//size_t cmdLen = sizeof(cmd) / sizeof(uint8_t);
+				//memset(cmdBuffer, 0, SIZE_OF_ARRAY(cmdBuffer));
+				//memset(cmdBuffer, cmd, cmdLen);
+
+				//Handling of nullptr and zero cmdlen
+
+				/* Write the command data first */
+				spi->write(cmd, cmdLen, false);
+
+				/* */
+				spi->write(cmdd+cmdLen, buff, buffLen, true);
+
+				//Need to figure out how to handle the semaphore here...multiple increments and then
+				//wait until it goes to zero again? I would need to own a lock on the SPI object and 
+				//then push in transmissions.
+			}
+
+
+			void write8(uint8_t data, bool disableSS);
+			void write32(uint32_t data, bool disableSS);
 		};
 		typedef boost::shared_ptr<AT45> AT45_sPtr;
 	}

@@ -9,9 +9,6 @@ namespace Adesto
 {
 	namespace NORFlash
 	{
-	
-		
-
 		/** Available Read Operations
 		 *	See: Datasheet Section 15
 		 **/

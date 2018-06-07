@@ -6,35 +6,44 @@
 #include <stdlib.h>
 
 /* Boost Includes */
-#include <boost/function.hpp>
+#include <boost/shared_ptr.hpp>
+
+/* Chimera Includes */
+#include <Chimera/spi.hpp>
+
+#if defined(USING_FREERTOS)
+#include <Chimera/threading.hpp>
+#endif
 
 /* Supporting Includes */
 #include "at45db081_definitions.hpp"
 
-namespace AT45DBFlash
+namespace Adesto
 {
-	//I'm going to need to define some kind of binding for the really low level read/write functionality.
-	//Do I want to give it a pointer reference that guarantees an interface or should I manually bind the 
-	//functions? Manually binding would give me a bit more flexibility I think...but then how do those functions
-	//know which object to use? Hmm...This begs the question of if I need some sort of highly generalized SPI interface
-	//that is completely and utterly processor independent. 
-	typedef boost::function<int, uint8_t*, uint8_t*, size_t> SPIReadWriteFunc;
-
-	class AT45DB
+	namespace NORFlash
 	{
-	public:
+		class AT45
+		{
+		public:
+			static const size_t numSectors = 16;
+			static const size_t numBlocks = 512;
+			static const size_t numPages = 4096;
+			static const size_t numBytesPerPage = 256;
 
+			AT45(const int& spiChannel);
+			~AT45() = default;
 
-		AT45DB() = default;
-		~AT45DB() = default;
+			//Need options to to run at desired clock frequency
 
-	private:
+			bool initialize(uint32_t clockFreq);
 
-		int pgmEraseOp(PgmEraseOp op); //Probably need to split this up
-		int readOp(ReadOp op);
-		int securityOp(SecurityOp op);
-		int extOp(ExtensionOp op);
-	};
+			
 
+		private:
+			Chimera::SPI::SPIClass_sPtr spi;	/**< SPI object used for talking with the flash chip */
+			Chimera::SPI::Setup setup;			/**< SPI initialization settings */
+		};
+		typedef boost::shared_ptr<AT45> AT45_sPtr;
+	}
 }
 #endif /* AT45DB081_HPP */

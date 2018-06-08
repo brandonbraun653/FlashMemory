@@ -35,47 +35,41 @@ namespace Adesto
 
 			//Need options to to run at desired clock frequency
 
+			/** Start up the SPI driver and verify that a valid chip is connected 
+			 *	@param[in] clockFreq The desired frequency for the SPI clock in Hz 
+			 *  @return true if successful, false if not
+			 **/
 			bool initialize(uint32_t clockFreq);
 
+			/** Grabs the current status register values 
+			 *	@return status register value
+			 **/
+			uint16_t readStatusRegister();
+
+			/** Reads the device manufacturer ID and device ID. Also updates internal copy.
+			 *	@return A struct of type AT45xx_DeviceInfo 
+			 **/
 			AT45xx_DeviceInfo getDeviceInfo();
+
+			
 
 		private:
 			Chimera::SPI::SPIClass_sPtr spi;	/**< SPI object used for talking with the flash chip */
 			Chimera::SPI::Setup setup;			/**< SPI initialization settings */
 			
-			AT45xx_DeviceInfo info;
+			AT45xx_DeviceInfo info;				/**< Information regarding flash chip specifics */
 			
 			#if defined(USING_FREERTOS)
-			SemaphoreHandle_t processWakeup;
+			SemaphoreHandle_t multiTXWakeup;
+			SemaphoreHandle_t singleTXWakeup;
 			#endif 
 
-			uint8_t cmdBuffer[4];
-			uint8_t emptyBuffer[264];
+			uint8_t cmdBuffer[10];
 			
-			void readCMD(uint8_t cmd, uint8_t* buff, size_t len);
+			void executeCMD(uint8_t* cmd, size_t cmdLen, uint8_t* buff = nullptr, size_t buffLen = 0);
 			
-			void executeCMD(uint8_t* cmd, size_t cmdLen, uint8_t* buff, size_t buffLen)
-			{
-				//size_t cmdLen = sizeof(cmd) / sizeof(uint8_t);
-				//memset(cmdBuffer, 0, SIZE_OF_ARRAY(cmdBuffer));
-				//memset(cmdBuffer, cmd, cmdLen);
+			void usePowerOf2FlashPageSize();
 
-				//Handling of nullptr and zero cmdlen
-
-				/* Write the command data first */
-				spi->write(cmd, cmdLen, false);
-
-				/* */
-				spi->write(cmdd+cmdLen, buff, buffLen, true);
-
-				//Need to figure out how to handle the semaphore here...multiple increments and then
-				//wait until it goes to zero again? I would need to own a lock on the SPI object and 
-				//then push in transmissions.
-			}
-
-
-			void write8(uint8_t data, bool disableSS);
-			void write32(uint32_t data, bool disableSS);
 		};
 		typedef boost::shared_ptr<AT45> AT45_sPtr;
 	}

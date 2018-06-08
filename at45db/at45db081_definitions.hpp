@@ -61,8 +61,8 @@ namespace Adesto
 		 **/
 		enum AT45DB_PgmEraseOp_uint8_t : uint8_t
 		{
-			BUFFER1_WRITE							= 0x84,			/* Buffer 1 WRite */
-			BUFFER2_WRITE							= 0x87,			/* Buffer 2 WRite */
+			BUFFER1_WRITE							= 0x84,			/* Buffer 1 Write */
+			BUFFER2_WRITE							= 0x87,			/* Buffer 2 Write */
 			BUFFER1_TO_MAIN_MEM_PAGE_PGM_W_ERASE	= 0x83,			/* Buffer 1 to Main Memory Page Program with Built-In Erase */
 			BUFFER2_TO_MAIN_MEM_PAGE_PGM_W_ERASE	= 0x86,			/* Buffer 2 to Main Memory Page Program with Build-In Erase */
 			BUFFER1_TO_MAIN_MEM_PAGE_PGM_WO_ERASE	= 0x88,			/* Buffer 1 to Main Memory Page Program without Built-In Erase */
@@ -81,7 +81,8 @@ namespace Adesto
 
 		enum AT45DB_PgmEraseOp_uint32_t : uint32_t
 		{
-			CHIP_ERASE								= 0xC794809A,	/* Chip Erase */
+			//Note: These values are reversed to preserve bit order 
+			CHIP_ERASE								= 0x9A8094C7,	/* Chip Erase */
 		};
 
 		/** Protection & Security Commands
@@ -96,13 +97,14 @@ namespace Adesto
 
 		enum AT45DB_SecurityOp_uint32_t : uint32_t
 		{
-			ENABLE_SECTOR_PROTECTION				= 0x3D2A7FA9,	/* Enable Sector Protection */
-			DISABLE_SECTOR_PROTECTION				= 0x3D2A7F9A,	/* Disable Sector Protection */
-			ERASE_SECTOR_PROTECTION_REG				= 0x3D2A7FCF,	/* Erase Sector Protection Register */
-			PGM_SECTOR_PROTECTION_REG				= 0x3D2A7FFC,	/* Program Sector Protection Register */
-			SECTOR_LOCKDOWN							= 0x3D2A7F30,	/* Sector Lockdown */
-			FREEZE_SECTOR_LOCKDOWN					= 0x3455AA40,	/* Freeze Sector Lockdown */
-			PGM_SECURITY_REGISTER					= 0x9B000000,	/* Program Security Register */
+			//Note: These values are reversed to preserve bit order 
+			ENABLE_SECTOR_PROTECTION				= 0xA97F2A3D,	/* Enable Sector Protection */
+			DISABLE_SECTOR_PROTECTION				= 0x9A7F2A3D,	/* Disable Sector Protection */
+			ERASE_SECTOR_PROTECTION_REG				= 0xCF7F2A3D,	/* Erase Sector Protection Register */
+			PGM_SECTOR_PROTECTION_REG				= 0xFC7F2A3D,	/* Program Sector Protection Register */
+			SECTOR_LOCKDOWN							= 0x307F2A3D,	/* Sector Lockdown */
+			FREEZE_SECTOR_LOCKDOWN					= 0x40AA5534,	/* Freeze Sector Lockdown */
+			PGM_SECURITY_REGISTER					= 0x0000009B,	/* Program Security Register */
 		};
 
 		/** Additional Commands
@@ -125,9 +127,10 @@ namespace Adesto
 
 		enum AT45DB_ExtensionOp_uint32_t : uint32_t
 		{
-			CFG_PWR_2_PAGE_SIZE						= 0x3D2A80A6,	/* Configure "Power of 2" (Binary) Page Size */
-			CFG_STD_FLASH_PAGE_SIZE					= 0x3D2A80A7,	/* Configure Standard DataFlash Page Size */
-			SOFTWARE_RESET							= 0xF0000000	/* Software Reset */
+			//Note: These values are reversed to preserve bit order 
+			CFG_PWR_2_PAGE_SIZE		= 0xA6802A3D,	/* Configure "Power of 2" (Binary) Page Size */
+			CFG_STD_FLASH_PAGE_SIZE = 0xA7802A3D,	/* Configure Standard DataFlash Page Size */
+			SOFTWARE_RESET			= 0x000000F0	/* Software Reset */
 		};
 
 		/** Informs the user about the type of chip in use

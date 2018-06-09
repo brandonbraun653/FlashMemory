@@ -6,13 +6,98 @@
 using namespace Chimera::SPI;
 
 #define BYTE_LEN(x) (sizeof(x)/sizeof(uint8_t))
+#define STANDARD_PAGE_SIZE 264
+#define BINARY_PAGE_SIZE 256
+
+struct FlashSizes
+{
+	size_t numSectors;
+	size_t numBlocks;
+	size_t numPages;
+};
+
+struct AddressDescriptions
+{
+	uint8_t dummyBitsMSB;
+	uint8_t addressBits;
+	uint8_t dummyBitsLSB;
+};
+
+struct AddressScheme
+{
+	AddressDescriptions standardSize;
+	AddressDescriptions binarySize;
+};
+
+struct MemoryAddressFormat
+{
+	AddressScheme page;
+	AddressScheme block;
+	AddressScheme sector;
+	AddressScheme sector0ab;
+	const uint8_t numAddressBytes;
+};
+
+
+/* Describes common delay times for most flash operations (in mS) */
+struct FlashDelay
+{
+	uint8_t pageEraseAndProgramming;
+	uint8_t pageProgramming;
+	uint8_t pageErase;
+	uint8_t blockErase;
+	uint16_t sectorErase;
+	uint16_t chipErase;
+};
+
+
+/* Useful for determining any runtime errors */
+#define ADDRESS_OVERRUN			(1u << 0)
+#define INVALID_SECTION_NUMBER	(1u << 1)
+
 
 namespace Adesto
 {
 	namespace NORFlash
-	{
-		AT45::AT45(const int& spiChannel)
+	{	
+		/* This MUST be kept in the same order as FlashChip enum */
+		static const FlashSizes chipSpecs[NUM_SUPPORTED_CHIPS] = 
 		{
+			{ 16, 512, 4096 },	//AT45DB081E
+		};
+
+		static const MemoryAddressFormat addressFormat[NUM_SUPPORTED_CHIPS] =
+		{
+			//AT45DB081E: See datasheet pgs. 13-14
+			{
+				{ {3, 12, 9}, {4, 12, 8} },	//Page
+				{ {3, 9, 12}, {4, 9, 11} },	//Block
+				{ {3, 4, 17}, {4, 4, 16} },	//Sector
+				{ {3, 9, 12}, {4, 9, 11} },	//Sector 0a, 0b
+				3							//Number of address bytes
+			},
+		};
+
+		static const FlashDelay chipDelay[NUM_SUPPORTED_CHIPS] = 
+		{
+			//AT45DB081E: See datasheet pg.49
+			{
+				15,		//Page erase and programming 
+				2,		//Page programming 
+				12,		//Page erase
+				30,		//Block erase
+				700,	//Sector erase
+				10000	//Chip erase
+			},
+		};
+
+
+		AT45::AT45(FlashChip chip, const int& spiChannel)
+		{
+			device = chip;
+
+			//memoryAddress = new uint8_t(addressFormat[device].numAddressBytes);
+
 			spi = boost::make_shared<SPIClass>(spiChannel);
 
 			setup.clockFrequency = 1000000;
@@ -29,10 +114,10 @@ namespace Adesto
 			#endif
 		}
 
-		bool AT45::initialize(uint32_t clockFreq)
+		Adesto::Status AT45::initialize(uint32_t clockFreq)
 		{
 			if (spi->begin(setup) != SPI_OK)
-				return false;
+				return ERROR_SPI_INIT_FAILED;
 
 			#if defined(USING_FREERTOS)
 			spi->setMode(TXRX, DMA);
@@ -42,28 +127,187 @@ namespace Adesto
 			#endif
 
 			/*--------------------------------------
-			 * Check for a proper device connection  
+			 * Check for a proper device connection:
+			 *	1) Get the manufacturer id at low freq (~1MHz for stability)
+			 *	2) Retry again at the user requested frequency 
 			 *-------------------------------------*/
-			//First check at low frequency (~1MHz) for stability reasons
 			auto lowFreqInfo = getDeviceInfo();
 			if (info.manufacturerID != JEDEC_CODE)
-				return false;
+				return ERROR_UNKNOWN_JEDEC_CODE;
 
-			//Now try at the requested frequency 
 			spi->updateClockFrequency(clockFreq);
 			auto hiFreqInfo = getDeviceInfo();
 			
 			if (memcmp(&lowFreqInfo, &hiFreqInfo, sizeof(AT45xx_DeviceInfo)) != 0)
-				return false;
+				return ERROR_FAILED_HIGH_FREQUENCY_TRANSACTION;
 
 
 			/*--------------------------------------
 			* Initialize various other settings
 			*-------------------------------------*/
-			usePowerOf2FlashPageSize();
+			useBinaryPageSize();
+			if (pageSize != getPageSizeConfig())
+				return ERROR_PAGE_SIZE_MISMATCH;
 
-			return true;
+			return FLASH_OK;
 		}
+
+		Adesto::Status AT45::erase(uint32_t address, size_t len)
+		{
+			if (len)
+			{
+				/* Check alignment */
+				if (address % pageSize) return ERROR_ADDRESS_NOT_PAGE_ALIGNED;
+				if (len % pageSize)		return ERROR_LENGTH_NOT_PAGE_ALIGNED;
+
+				/* Break the address range down into erasable modules */
+				if (len >= sectorSize)
+				{
+					size_t numSectors = len / sectorSize;
+
+					eraseRange_Sectors.start = getSectionNumberFromAddress(SECTOR, address);
+					eraseRange_Sectors.end = eraseRange_Sectors.start + numSectors - 1;
+					eraseRange_Sectors.rangeValid = true;
+
+					len -= sectorSize * numSectors;
+					address += sectorSize * numSectors;
+				}
+
+				if (len >= blockSize)
+				{
+					size_t numBlocks = len / blockSize;
+
+					eraseRange_Blocks.start = getSectionNumberFromAddress(BLOCK, address);
+					eraseRange_Blocks.end = eraseRange_Blocks.start + numBlocks - 1;
+					eraseRange_Blocks.rangeValid = true;
+
+					len -= blockSize * numBlocks;
+					address += blockSize * numBlocks;
+				}
+
+				if (len >= pageSize)
+				{
+					size_t numPages = len / pageSize;
+
+					eraseRange_Pages.start = getSectionNumberFromAddress(PAGE, address);
+					eraseRange_Pages.end = eraseRange_Pages.start + numPages - 1;
+					eraseRange_Pages.rangeValid = true;
+				}
+			}
+			
+			return eraseRanges();
+		}
+
+		Adesto::Status AT45::eraseChip()
+		{
+			auto cmd = CHIP_ERASE;
+			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
+
+			executeCMD(cmdBuffer, BYTE_LEN(cmd));
+
+			while (!deviceReady())
+			{
+				Chimera::delayMilliseconds(chipDelay[device].pageErase);
+
+				if (erasePgmError())
+					return ERROR_ERASE_FAILURE;
+			}
+
+			return FLASH_OK;
+		}
+
+		Adesto::Status AT45::eraseRanges()
+		{
+			//SECTOR ERASE
+			if (eraseRange_Sectors.rangeValid)
+			{
+				for (int i = eraseRange_Sectors.start; i < eraseRange_Sectors.end + 1; i++)
+				{
+					eraseSector(i);
+
+					while (!deviceReady())
+					{
+						//Delay the average time for a sector erase as specified by the datasheet 
+						Chimera::delayMilliseconds(chipDelay[device].sectorErase);
+					}
+
+					if (erasePgmError())
+						return ERROR_ERASE_FAILURE;
+				}
+
+				eraseRange_Sectors.rangeValid = false;
+			}
+			
+			//BLOCK ERASE
+			if (eraseRange_Blocks.rangeValid)
+			{
+				for (int i = eraseRange_Blocks.start; i < eraseRange_Blocks.end + 1; i++)
+				{
+					eraseBlock(i);
+
+					while (!deviceReady())
+					{
+						Chimera::delayMilliseconds(chipDelay[device].blockErase);
+					}
+
+					if (erasePgmError())
+						return ERROR_ERASE_FAILURE;
+				}
+
+				eraseRange_Blocks.rangeValid = false;
+			}
+			
+
+			//PAGE ERASE
+			if (eraseRange_Pages.rangeValid)
+			{
+				for (int i = eraseRange_Pages.start; i < eraseRange_Pages.end + 1; i++)
+				{
+					eraseBlock(i);
+
+					while (!deviceReady())
+					{
+						Chimera::delayMilliseconds(chipDelay[device].pageErase);
+					}
+
+					if (erasePgmError())
+						return ERROR_ERASE_FAILURE;
+				}
+
+				eraseRange_Pages.rangeValid = false;
+			}
+			
+			return FLASH_OK;
+		}
+
+		void AT45::eraseSector(uint32_t sectorNumber)
+		{
+			cmdBuffer[0] = SECTOR_ERASE;
+
+			memcpy(cmdBuffer + 1, buildAddressCommand(SECTOR, sectorNumber), addressFormat[device].numAddressBytes);
+
+			executeCMD(cmdBuffer, (BYTE_LEN(SECTOR_ERASE) + addressFormat[device].numAddressBytes));
+		}
+
+		void AT45::eraseBlock(uint32_t blockNumber)
+		{
+			cmdBuffer[0] = BLOCK_ERASE;
+
+			memcpy(cmdBuffer + 1, buildAddressCommand(BLOCK, blockNumber), addressFormat[device].numAddressBytes);
+
+			executeCMD(cmdBuffer, (BYTE_LEN(BLOCK_ERASE) + addressFormat[device].numAddressBytes));
+		}
+
+		void AT45::erasePage(uint32_t pageNumber)
+		{
+			cmdBuffer[0] = PAGE_ERASE;
+
+			memcpy(cmdBuffer + 1, buildAddressCommand(PAGE, pageNumber), addressFormat[device].numAddressBytes);
+
+			executeCMD(cmdBuffer, (BYTE_LEN(PAGE_ERASE) + addressFormat[device].numAddressBytes));
+		}
+
+		
 
 		uint16_t AT45::readStatusRegister()
 		{
@@ -75,6 +319,25 @@ namespace Adesto
 
 			return (uint16_t)((reg[0] << 8) | reg[1]);
 		}
+
+		uint16_t AT45::getPageSizeConfig()
+		{
+			auto reg = readStatusRegister();
+			return (reg & PAGE_SIZE_CONFIG) ? 256 : 264;
+		}
+
+		bool AT45::deviceReady()
+		{
+			auto reg = readStatusRegister();
+			return (reg & READY_BUSY);
+		}
+
+		bool AT45::erasePgmError()
+		{
+			auto reg = readStatusRegister();
+			return (reg & ERASE_PGM_ERROR);
+		}
+
 
 		AT45xx_DeviceInfo AT45::getDeviceInfo()
 		{
@@ -131,12 +394,136 @@ namespace Adesto
 			}
 		}
 
-		void AT45::usePowerOf2FlashPageSize()
+		void AT45::useBinaryPageSize()
 		{
 			uint32_t cmd = CFG_PWR_2_PAGE_SIZE;
 			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
 
 			executeCMD(cmdBuffer, BYTE_LEN(cmd));
+
+			//TODO: validate that the value is set 
+
+			//Note: These values appear constant over all AT45 chips
+			pageSize = 256;
+			blockSize = 2048;
+			sectorSize = 65536;
+		}
+
+		void AT45::useDataFlashPageSize()
+		{
+			uint32_t cmd = CFG_STD_FLASH_PAGE_SIZE;
+			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
+
+			executeCMD(cmdBuffer, BYTE_LEN(cmd));
+
+
+			//TODO: validate that the value is set
+
+			//Note: These values appear constant over all AT45 chips
+			pageSize = 264;
+			blockSize = 2112;
+			sectorSize = 67584;
+		}
+
+		uint8_t* AT45::buildAddressCommand(FlashSection section, uint32_t sectionNumber)
+		{
+			uint32_t fullAddress = 0u;
+			const AddressDescriptions* config;
+
+			switch (section)
+			{
+			case PAGE:
+				if (pageSize == STANDARD_PAGE_SIZE)
+					config = &addressFormat[device].page.standardSize;
+				else
+					config = &addressFormat[device].page.binarySize;
+
+				//Indicate that an incorrect address will be generated below
+				if (sectionNumber >= chipSpecs[device].numPages)
+					errorFlags |= ADDRESS_OVERRUN;
+				break;
+
+			case BLOCK:
+				if (pageSize == STANDARD_PAGE_SIZE)
+					config = &addressFormat[device].block.standardSize;
+				else
+					config = &addressFormat[device].block.binarySize;
+
+				if (sectionNumber >= chipSpecs[device].numBlocks)
+					errorFlags |= ADDRESS_OVERRUN;
+				break;
+
+			case SECTOR:
+				if (sectionNumber == 0)
+				{
+					if (pageSize == STANDARD_PAGE_SIZE)
+						config = &addressFormat[device].sector0ab.standardSize;
+					else
+						config = &addressFormat[device].sector0ab.binarySize;
+				}
+				else
+				{
+					if (pageSize == STANDARD_PAGE_SIZE)
+						config = &addressFormat[device].sector.standardSize;
+					else
+						config = &addressFormat[device].sector.binarySize;
+				}
+
+				if (sectionNumber >= chipSpecs[device].numSectors)
+					errorFlags |= ADDRESS_OVERRUN;
+				break;
+			};
+
+			// This ignores Sector 0a for simplicity reasons. The full address below directly corresponds
+			// to Sector 0b, and the format seems common across all AT45 chips. Use Block 0 to get the address for Sector 0a.
+			if ((section == SECTOR) && (sectionNumber == 0))
+			{
+				fullAddress = 1u << config->dummyBitsLSB;
+			}
+			else
+			{
+				uint32_t bitMask = (1u << config->addressBits) - 1u;
+				fullAddress = (sectionNumber & bitMask) << config->dummyBitsLSB;
+			}
+
+			memcpy(memoryAddress, (uint8_t*)&fullAddress, addressFormat[device].numAddressBytes);
+			
+			return memoryAddress;
+		}
+
+		uint32_t AT45::getSectionNumberFromAddress(FlashSection section, uint32_t rawAddress)
+		{
+			uint32_t sectionNumber = 0;
+
+			/* Grab the lowest whole number page first. If any remainder, it means we are in the middle of a page */
+			switch (section)
+			{
+			case PAGE:
+				sectionNumber = rawAddress / pageSize;
+				if ((rawAddress % pageSize) > 0) sectionNumber += 1;
+
+				if (sectionNumber >= chipSpecs[device].numPages)
+					errorFlags |= INVALID_SECTION_NUMBER;
+				break;
+
+			case BLOCK:
+				sectionNumber = rawAddress / blockSize;
+				if ((rawAddress % blockSize) > 0) sectionNumber += 1;
+
+				if (sectionNumber >= chipSpecs[device].numBlocks)
+					errorFlags |= INVALID_SECTION_NUMBER;
+				break;
+
+			case SECTOR: //Does not differentiate between Sector 0a/0b and will return 0 for both address ranges.
+				sectionNumber = rawAddress / sectorSize;
+				if ((rawAddress % sectorSize) > 0) sectionNumber += 1;
+
+				if (sectionNumber >= chipSpecs[device].numSectors)
+					errorFlags |= INVALID_SECTION_NUMBER;
+				break;
+			};
+
+			return sectionNumber;
 		}
 	}
 }

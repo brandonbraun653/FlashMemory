@@ -111,6 +111,7 @@ namespace Adesto
 			#if defined(USING_FREERTOS)
 			multiTXWakeup = xSemaphoreCreateBinary();
 			singleTXWakeup = xSemaphoreCreateBinary();
+			singleTXRXWakeup = xSemaphoreCreateBinary();
 			#endif
 		}
 
@@ -122,7 +123,8 @@ namespace Adesto
 			#if defined(USING_FREERTOS)
 			spi->setMode(TXRX, DMA);
 			spi->attachThreadTrigger(BUFFERED_TXRX_COMPLETE, &multiTXWakeup);
-			spi->attachThreadTrigger(TXRX_COMPLETE, &singleTXWakeup);
+			spi->attachThreadTrigger(TX_COMPLETE, &singleTXWakeup);
+			spi->attachThreadTrigger(TXRX_COMPLETE, &singleTXRXWakeup);
 			#else			spi->setMode(TXRX, BLOCKING);
 			#endif
 
@@ -152,7 +154,123 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::erase(uint32_t address, size_t len)
+		Adesto::Status AT45::continuousRead(uint32_t pageNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete)
+		{
+			cmdBuffer[0] = CONT_ARR_READ_HF2;
+
+			uint32_t fullAddress = 0;
+			if (pageSize == STANDARD_PAGE_SIZE)
+			{
+				startAddress &= 0x1FF;	//Mask off the first 9 bits
+				fullAddress = (pageNumber << 9) | startAddress;
+			}
+			else
+			{
+				startAddress &= 0xFF;	//Mask off the first 8 bits
+				fullAddress = (pageNumber << 8) | startAddress;
+			}
+
+			/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 2 dummy bytes.
+			* The dummy bytes are used to initialize the read operation. */
+			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
+			SPI_write(cmdBuffer, 6, false);
+
+			SPI_read(dataOut, len, true);
+
+			if (onComplete)
+				onComplete();
+
+			return FLASH_OK;
+		}
+
+		Adesto::Status AT45::directPageRead(uint32_t pageNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete)
+		{
+			cmdBuffer[0] = MAIN_MEM_PAGE_READ;
+
+			uint32_t fullAddress = 0;
+
+			if (pageSize == STANDARD_PAGE_SIZE)
+			{
+				startAddress &= 0x1FF;	//Mask off the first 9 bits
+				fullAddress = (pageNumber << 9) | startAddress;
+			}
+			else
+			{
+				startAddress &= 0xFF;	//Mask off the first 8 bits
+				fullAddress = (pageNumber << 8) | startAddress;
+			}
+				
+			/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 4 dummy bytes.
+			 * The dummy bytes are used to initialize the read operation. */
+			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
+			SPI_write(cmdBuffer, 8, false);
+
+			SPI_read(dataOut, len, true);
+
+			if (onComplete)
+				onComplete();
+
+			return FLASH_OK;
+		}
+
+		Adesto::Status AT45::bufferRead(SRAMBuffer bufferNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete)
+		{
+			if (pageSize == STANDARD_PAGE_SIZE)
+				startAddress &= 0x1FF;	//Mask off the first 9 bits
+			else
+				startAddress &= 0xFF;	//Mask off the first 8 bits
+
+			if (bufferNumber == BUFFER1)
+				cmdBuffer[0] = BUFFER1_READ_HF;
+			else
+				cmdBuffer[0] = BUFFER2_READ_HF;
+
+			
+			/* Default read will use the High Frequency mode, so an extra dummy byte is needed on the
+			 * end of the address. This yields a full 32 bit address with the first 15 or 16 bits ignored,
+			 * the next 9 or 8 bits as the actual address within the page, and then the last 8 bits ignored.
+			 *
+			 * In practice this means that in the cmdBuffer, byte 1 holds the command, 3 & 4 hold the address,
+			 * and 2 & 5 are completely ignored by the flash chip.  Total TX length is five bytes. */
+			memcpy(cmdBuffer + 2, (uint8_t*)&startAddress, 2);
+			SPI_write(cmdBuffer, 5, false);
+			
+			SPI_read(dataOut, len, true);
+
+			if (onComplete)
+				onComplete();
+
+			return FLASH_OK;
+		}
+
+		Adesto::Status AT45::bufferWrite(SRAMBuffer bufferNumber, uint16_t startAddress, uint8_t* dataIn, size_t len, func_t onComplete)
+		{
+			if (pageSize == STANDARD_PAGE_SIZE)
+				startAddress &= 0x1FF;	//Mask off the first 9 bits
+			else
+				startAddress &= 0xFF;	//Mask off the first 8 bits
+
+			
+			if (bufferNumber == BUFFER1)
+				cmdBuffer[0] = BUFFER1_WRITE;
+			else
+				cmdBuffer[0] = BUFFER2_WRITE;
+
+			/* The full buffer write command is the opcode byte + 3 address bytes. The first address byte is 
+			 * completely ignored and the last two hold the real address. Total TX length is four bytes.*/
+			memcpy(cmdBuffer + 2, (uint8_t*)&startAddress, 2);
+			SPI_write(cmdBuffer, 4, false);
+
+			/* Pump in the actual data to the buffer */
+			SPI_write(dataIn, len, true);
+
+			if (onComplete)
+				onComplete();
+
+			return FLASH_OK;
+		}
+
+		Adesto::Status AT45::erase(uint32_t address, size_t len, func_t onComplete)
 		{
 			if (len)
 			{
@@ -194,11 +312,13 @@ namespace Adesto
 					eraseRange_Pages.rangeValid = true;
 				}
 			}
+			else
+				return ERROR_ERASE_LENGTH_INVALID;
 			
-			return eraseRanges();
+			return eraseRanges(onComplete);
 		}
 
-		Adesto::Status AT45::eraseChip()
+		Adesto::Status AT45::eraseChip(func_t onComplete)
 		{
 			auto cmd = CHIP_ERASE;
 			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
@@ -213,10 +333,13 @@ namespace Adesto
 					return ERROR_ERASE_FAILURE;
 			}
 
+			if (onComplete)
+				onComplete();
+
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::eraseRanges()
+		Adesto::Status AT45::eraseRanges(func_t onComplete)
 		{
 			//SECTOR ERASE
 			if (eraseRange_Sectors.rangeValid)
@@ -257,7 +380,6 @@ namespace Adesto
 				eraseRange_Blocks.rangeValid = false;
 			}
 			
-
 			//PAGE ERASE
 			if (eraseRange_Pages.rangeValid)
 			{
@@ -276,6 +398,9 @@ namespace Adesto
 
 				eraseRange_Pages.rangeValid = false;
 			}
+
+			if (onComplete) 
+				onComplete();
 			
 			return FLASH_OK;
 		}
@@ -392,6 +517,24 @@ namespace Adesto
 				xSemaphoreTake(singleTXWakeup, portMAX_DELAY);
 				#endif
 			}
+		}
+
+		void AT45::SPI_write(uint8_t* data, size_t len, bool disableSS)
+		{
+			spi->write(data, len, disableSS);
+
+			#if defined(USING_FREERTOS)
+			xSemaphoreTake(singleTXWakeup, portMAX_DELAY);
+			#endif
+		}
+
+		void AT45::SPI_read(uint8_t* data, size_t len, bool disableSS)
+		{
+			spi->write(cmdBuffer, data, len, disableSS);
+
+			#if defined(USING_FREERTOS)
+			xSemaphoreTake(singleTXRXWakeup, portMAX_DELAY);
+			#endif
 		}
 
 		void AT45::useBinaryPageSize()

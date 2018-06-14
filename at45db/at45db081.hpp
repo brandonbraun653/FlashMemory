@@ -45,6 +45,8 @@ namespace Adesto
 		ERROR_ADDRESS_NOT_PAGE_ALIGNED,
 		ERROR_ERASE_FAILURE,
 		ERROR_ERASE_LENGTH_INVALID,
+		ERROR_WRITE_LENGTH_INVALID,
+		ERROR_READ_LENGTH_INVALID,
 		ERROR_WRITE_FAILURE,
 		ERROR_DEVICE_NOT_READY,
 
@@ -62,6 +64,10 @@ namespace Adesto
 		size_t end;
 		bool rangeValid = false;
 	};
+
+
+
+
 
 	typedef void(*func_t)(void);
 
@@ -150,7 +156,7 @@ namespace Adesto
 			*
 			*	@param[in]	bufferNumber	Selects which SRAM buffer to write to
 			*	@param[in]	startAddress	Starting write address. Can be any value from 0 to the current page size
-			*	@param[out] dataIn			External array to transmit in
+			*	@param[out] dataIn			External array to transmit in (do not modify contents until write is complete)
 			*	@param[in]	len				Number of bytes to write
 			*	@param[in]	onComplete		Optional function pointer to execute upon task completion
 			*	@return FLASH_OK if everything is fine, otherwise ERROR_WRITE_FAILURE
@@ -176,7 +182,7 @@ namespace Adesto
 			 *	@param[in]	bufferNumber	Selects which SRAM buffer to use
 			 *	@param[in]	bufferOffset	Selects the first byte in the SRAM buffer to be written
 			 *	@param[in]	pageNumber		Page number in memory to write 
-			 *	@param[in]	dataIn			Pointer to external buffer of data to write
+			 *	@param[in]	dataIn			Pointer to external buffer of data to write (do not modify contents until write is complete)
 			 *	@param[in]	len				How many bytes should be written, up to a full page size
 			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
 			 *	@return FLASH_OK
@@ -189,11 +195,22 @@ namespace Adesto
 			 **/
 			Adesto::Status pageWrite(SRAMBuffer bufferNumber, uint16_t bufferOffset, uint16_t pageNumber, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
 
+			/** A completely self-contained operation to reprogram any number of sequential bytes within a page, without modifying the rest
+			 *	@param[in]	bufferNumber	Selects which SRAM buffer to use
+			 *	@param[in]	pageNumber		Page number in memory to write
+			 *	@param[in]	pageOffset		Selects the first byte in the page to be written
+			 *	@param[in]	dataIn			Pointer to external buffer of data to write (do not modify contents until write is complete)
+			 *	@param[in]	len				How many bytes should be written, up to a full page size
+			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+			 *	@return FLASH_OK
+			 **/
+			Adesto::Status readModifyWrite(SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
+
 			/** Utilizes SRAM buffer 1 to write a fixed number of bytes to a pre-erased page of memory. Only the bytes written will be programmed.
 			 *	If the end of the buffer is reached before all bytes are written, the data will be wrapped around to the beginning of the buffer.
 			 *	@param[in]	bufferOffset	Selects the first byte in the SRAM buffer to be written
 			 *	@param[in]	pageNumber		Page number in memory to write
-			 *	@param[in]	dataIn			Pointer to an external buffer of data to write
+			 *	@param[in]	dataIn			Pointer to an external buffer of data to write (do not modify contents until write is complete)
 			 *	@param[in]	len				How many bytes to write, up to a full page size
 			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
 			 *	@return FLASH_OK
@@ -207,6 +224,24 @@ namespace Adesto
 			 **/
 			Adesto::Status byteWrite(uint16_t bufferOffset, uint16_t pageNumber, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
 
+			/** Writes data to memory, 
+			 *	@param[in]	address			Starting address to begin write
+			 *	@param[in]	dataIn			Buffer of data (do not modify contents until write is complete)
+			 *	@param[in]	len				Number of bytes to write
+			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+			 *	@return FLASH_OK
+			 **/
+			Adesto::Status write(uint32_t address, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
+
+			/** Reads data from memory
+			 *	@param[in]	address			Starting address to begin read
+			 *	@param[in]	dataOut			Buffer to receive the data
+			 *	@param[in]	len				Number of bytes to read
+			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+			 *	@return FLASH_OK
+			 **/
+			Adesto::Status read(uint32_t address, uint8_t* dataOut, size_t len, func_t onComplete = nullptr);
+
 			/** Erase sections of the chip in multiples of the page size (default 256 bytes)
 			 *	@param[in]	address			Location to start the erasing. Must be page aligned.
 			 *	@param[in]	len				Number of bytes to be erased. Must be page aligned.
@@ -215,6 +250,8 @@ namespace Adesto
 			 *
 			 *	@note	Due to the segmented nature of this operation, it will not return until the memory has been erased. When using 
 			 *			FreeRTOS, this only blocks the current thread.
+			 *
+			 *	@todo	Try and create an OO version of the FreeRTOS tasks such that a class member thread could be spawned to handle this stuff without blocking
 			 **/
 			Adesto::Status erase(uint32_t address, size_t len, func_t onComplete = nullptr);
 
@@ -229,8 +266,8 @@ namespace Adesto
 			uint16_t getPageSizeConfig();
 
 			/** Grabs the current status register
-			*	@return status register value
-			**/
+			 *	@return status register value
+			 **/
 			uint16_t readStatusRegister();
 
 			/** Queries the flash chip status register and checks if the device is ready
@@ -247,7 +284,9 @@ namespace Adesto
 			
 			bool isEraseComplete();
 
-			
+			void useBinaryPageSize();
+
+			void useDataFlashPageSize();
 
 			/** Reads the device manufacturer ID and device ID. Also updates internal copy.
 			 *	@return A struct of type AT45xx_DeviceInfo 
@@ -261,8 +300,8 @@ namespace Adesto
 			bool isReadComplete();
 
 			/**	Checks an internal semaphore to see if a write operation was completed
-			*	@return true if complete, false if not
-			**/
+			 *	@return true if complete, false if not
+			 **/
 			bool isWriteComplete();
 			#endif
 
@@ -288,28 +327,53 @@ namespace Adesto
 			uint8_t cmdBuffer[10];				/**< Buffer for holding a command sequence */
 			uint8_t memoryAddress[3];			/**< Number of bytes needed for memory access addressing. Adesto seems to only use 3.*/
 
-			volatile uint32_t errorFlags = 0;	/**< Bit-field indicating various errors as define in .cpp file */
+			volatile uint32_t errorFlags = 0;	/**< Bit-field indicating various errors as defined in .cpp file */
 
-
-			EraseRange eraseRange_Sectors;
-			EraseRange eraseRange_Blocks;
-			EraseRange eraseRange_Pages;
 
 
 			void SPI_write(uint8_t* data, size_t len, bool disableSS = true);
 			void SPI_read(uint8_t* data, size_t len, bool disableSS = true);
 			
-			void useBinaryPageSize();
-			void useDataFlashPageSize();
+			
 
-			Adesto::Status eraseRanges(func_t onComplete = nullptr);
+			/* Data structure to support indexing memory sections */
+			struct MemoryRange
+			{
+				struct Range
+				{
+					size_t start;					/**< Which page/block/sector the range begins on */
+					size_t end;						/**< Which page/block/sector the range ends on */
+					size_t startPageOffset = 0;		/**< Starting address offset from beginning of the first page (zero if not a page) */
+					size_t endPageOffset = 0;		/**< How many bytes to write from beginning of the last page (zero if not a page) */
+				};
+
+				Range sector;
+				Range block;
+				Range page;
+			};
+
+			/* Converts an address and length into whole sections that can be erased */
+			MemoryRange getErasableSections(uint32_t address, size_t len);
+
+			/* Converts an address and length into page numbers and their associated start/end byte offsets 
+			 * for easy reading and writing arbitrary locations in memory */
+			MemoryRange getWriteReadPages(uint32_t startAddress, size_t len);
+
+			/* Erases a set of ranges as defined by a MemoryRange object */
+			Adesto::Status eraseRanges(MemoryRange range, func_t onComplete = nullptr);
+
 			void eraseSector(uint32_t sectorNumber);
 			void eraseBlock(uint32_t blockNumber);
 			void erasePage(uint32_t pageNumber);
 
 
 			uint8_t* buildAddressCommand(FlashSection section, uint32_t indexingNumber);
-			uint32_t getSectionNumberFromAddress(FlashSection section, uint32_t rawAddress);
+
+			/* Parses an address into a section category */
+			uint32_t getSectionFromAddress(FlashSection section, uint32_t rawAddress);
+
+			/* Gets a section number's starting address in memory */
+			uint32_t getSectionStartAddress(FlashSection section, uint32_t sectionNumber);
 		};
 		typedef boost::shared_ptr<AT45> AT45_sPtr;
 	}

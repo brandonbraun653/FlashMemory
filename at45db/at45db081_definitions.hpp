@@ -19,8 +19,12 @@ namespace Adesto
 	/** Lower 5 LSB of Device ID Byte 1*/
 	enum DensityCode : uint8_t
 	{
-		DENSITY_8MBIT = 0x05,
-		// Add more as needed 
+		DENSITY_2MBIT  = 0x03,
+		DENSITY_4MBIT  = 0x04,
+		DENSITY_8MBIT  = 0x05,
+		DENSITY_16MBIT = 0x06,
+		DENSITY_32MBIT = 0x07,
+		DENSITY_64MBIT = 0x08
 	};
 	
 	/** Upper 3 MSB of Device ID Byte 2*/

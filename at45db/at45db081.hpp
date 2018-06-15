@@ -109,21 +109,6 @@ namespace Adesto
 			 **/
 			Adesto::Status initialize(uint32_t clockFreq);
 
-			/** Reads data directly from a starting address in internal memory, bypassing both SRAM buffers without modification.
-			 *	Will continue reading from memory until the chip select line is deactivated.
-			 *
-			 *	@param[in]	pageNumber		The starting page which from which to read (not an address)
-			 *	@param[in]	startAddress	The offset within that page to start reading from. Can be any value from 0 to page size
-			 *	@param[out]	dataOut			External array to hold the data
-			 *	@param[in]	len				Number of bytes to be read
-			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-			 *	@return Always returns FLASH_OK
-			 *
-			 *	@note	This function is blocking by default. If using FreeRTOS, this function will immediately return and its completion
-			 *			status can be checked with AT45::isReadComplete().
-			 **/
-			Adesto::Status continuousRead(uint32_t pageNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete = nullptr);
-
 			/** Reads data directly from a page in internal memory, bypassing both SRAM buffers without modification.
 			 *	@note If the end of the buffer is reached before all requested bytes have been clocked out,
 			 *	the data will then wrap around to the beginning of the buffer.
@@ -170,10 +155,7 @@ namespace Adesto
 			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
 			 *	@return FLASH_OK
 			 *
-			 *	@note	If setting erase = false, the page must be erased by some other means before programming, otherwise an error will occur.
-			 *
-			 *	@note	When using FreeRTOS, this function exits immediately after starting the write process. SPI status can be checked with
-			 *			AT45::isWriteComplete()
+			 *	@note	If setting erase = false, the page must be erased by some other means before programming, otherwise an error will occur
 			 **/
 			Adesto::Status bufferWrite(SRAMBuffer bufferNumber, uint16_t pageNumber, bool erase, func_t onComplete = nullptr);
 
@@ -188,10 +170,6 @@ namespace Adesto
 			 *	@return FLASH_OK
 			 *
 			 *	@note	If only a partial page is written to the SRAM buffer, whatever data is left in SRAM will overwrite the full page in memory
-			 *
-			 *	@note	When using FreeRTOS, this function exits immediately after starting the write process. SPI status can be checked with
-			 *			AT45::isWriteComplete(), but doesn't check if the flash chip has written the data to memory. This is performed by
-			 *			AT45::isProgramComplete()
 			 **/
 			Adesto::Status pageWrite(SRAMBuffer bufferNumber, uint16_t bufferOffset, uint16_t pageNumber, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
 
@@ -217,14 +195,10 @@ namespace Adesto
 			 *
 			 *	@note	Any data already in SRAM buffer 1 will be clobbered, BUT only the bytes altered in SRAM will be altered in memory. For example,
 			 *			if two bytes are written to SRAM, only two bytes will be written to memory.
-			 *
-			 *	@note	When using FreeRTOS, this function exits immediately after starting the write process. SPI status can be checked with
-			 *			AT45::isWriteComplete(), but doesn't check if the flash chip has written the data to memory. This is performed by
-			 *			AT45::isProgramComplete()
 			 **/
 			Adesto::Status byteWrite(uint16_t bufferOffset, uint16_t pageNumber, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
 
-			/** Writes data to memory, 
+			/** Writes a buffer of data to internal memory at some address 
 			 *	@param[in]	address			Starting address to begin write
 			 *	@param[in]	dataIn			Buffer of data (do not modify contents until write is complete)
 			 *	@param[in]	len				Number of bytes to write
@@ -233,14 +207,45 @@ namespace Adesto
 			 **/
 			Adesto::Status write(uint32_t address, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
 
-			/** Reads data from memory
-			 *	@param[in]	address			Starting address to begin read
-			 *	@param[in]	dataOut			Buffer to receive the data
-			 *	@param[in]	len				Number of bytes to read
+
+			/** Writes a generic data type to internal memory
+			 *	@param[in]	address			The starting address which from which to read
+			 *	@param[in]	dataIn			Data structure to write
+			 *	@param[in]	len				Number of bytes to be read
 			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-			 *	@return FLASH_OK
+			 *	@return Always returns FLASH_OK
+			 **/
+			template<typename T>
+			Adesto::Status write(uint32_t address, T& dataIn, func_t onComplete = nullptr)
+			{
+				return write(address, reinterpret_cast<uint8_t*>(&dataIn), sizeof(T), onComplete);
+			}
+
+			/** Reads data directly from a starting address in internal memory, bypassing both SRAM buffers without modification.
+			 *	Will continue reading from memory until the chip select line is deactivated.
+			 *
+			 *	@param[in]	address			The starting address which from which to read
+			 *	@param[out]	dataOut			External array to hold the data
+			 *	@param[in]	len				Number of bytes to be read
+			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+			 *	@return Always returns FLASH_OK
 			 **/
 			Adesto::Status read(uint32_t address, uint8_t* dataOut, size_t len, func_t onComplete = nullptr);
+
+			
+			/** Reads data directly from internal memory into an instance of the output type.
+			 *
+			 *	@param[in]	address			The starting address which from which to read
+			 *	@param[out]	dataOut			Data structure to read into
+			 *	@param[in]	len				Number of bytes to be read
+			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+			 *	@return Always returns FLASH_OK
+			 **/
+			template<typename T>
+			Adesto::Status read(uint32_t address, T& dataOut, func_t onComplete = nullptr)
+			{
+				return read(address, reinterpret_cast<uint8_t*>(&dataOut), sizeof(T), onComplete);
+			}
 
 			/** Erase sections of the chip in multiples of the page size (default 256 bytes)
 			 *	@param[in]	address			Location to start the erasing. Must be page aligned.
@@ -284,9 +289,9 @@ namespace Adesto
 			
 			bool isEraseComplete();
 
-			void useBinaryPageSize();
+			Adesto::Status useBinaryPageSize();
 
-			void useDataFlashPageSize();
+			Adesto::Status useDataFlashPageSize();
 
 			/** Reads the device manufacturer ID and device ID. Also updates internal copy.
 			 *	@return A struct of type AT45xx_DeviceInfo 
@@ -304,6 +309,9 @@ namespace Adesto
 			 **/
 			bool isWriteComplete();
 			#endif
+
+
+			uint32_t maxAddress = 0;
 
 		private:
 			Chimera::SPI::SPIClass_sPtr spi;	/**< SPI object used for talking with the flash chip */
@@ -374,6 +382,9 @@ namespace Adesto
 
 			/* Gets a section number's starting address in memory */
 			uint32_t getSectionStartAddress(FlashSection section, uint32_t sectionNumber);
+
+			/* Returns the capacity of the discovered chip in bytes */
+			uint32_t getFlashSize();
 		};
 		typedef boost::shared_ptr<AT45> AT45_sPtr;
 	}

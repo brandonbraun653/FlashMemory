@@ -145,41 +145,13 @@ namespace Adesto
 			if (memcmp(&lowFreqInfo, &hiFreqInfo, sizeof(AT45xx_DeviceInfo)) != 0)
 				return ERROR_FAILED_HIGH_FREQUENCY_TRANSACTION;
 
-
 			/*--------------------------------------
 			* Initialize various other settings
 			*-------------------------------------*/
-			useBinaryPageSize();
-			if (pageSize != getPageSizeConfig())
-				return ERROR_PAGE_SIZE_MISMATCH;
-
-			return FLASH_OK;
-		}
-
-		Adesto::Status AT45::continuousRead(uint32_t pageNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete)
-		{
-			/* Shift and mask by either 9 or 8 bits */
-			uint32_t fullAddress = (pageSize == STANDARD_PAGE_SIZE) ? ((pageNumber << 9) | (startAddress & 0x1FF)) : ((pageNumber << 8) | (startAddress & 0xFF));
+			maxAddress = getFlashSize();
 
 
-			/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 2 dummy bytes.
-			 * The dummy bytes are used to initialize the read operation. */
-			cmdBuffer[0] = CONT_ARR_READ_LF;
-			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
-			SPI_write(cmdBuffer, 4, false);
-
-			#if defined(USING_FREERTOS)
-			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
-			while (!isWriteComplete());
-			#endif 
-
-			/* FREERTOS: Safe to return immediately because data pointer is out of function scope */
-			SPI_read(dataOut, len, true);
-
-			if (onComplete)
-				onComplete();
-
-			return FLASH_OK;
+			return useBinaryPageSize();
 		}
 
 		Adesto::Status AT45::directPageRead(uint32_t pageNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete)
@@ -193,13 +165,6 @@ namespace Adesto
 			 * The dummy bytes are used to initialize the read operation. */
 			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
 			SPI_write(cmdBuffer, 8, false);
-
-			#if defined(USING_FREERTOS)
-			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
-			while (!isWriteComplete());
-			#endif 
-
-			/* FREERTOS: Safe to return immediately because data pointer is out of function scope */
 			SPI_read(dataOut, len, true);
 
 			if (onComplete)
@@ -223,13 +188,6 @@ namespace Adesto
 			 * and 2 & 5 are completely ignored by the flash chip.  Total TX length is five bytes. */
 			memcpy(cmdBuffer + 2, (uint8_t*)&startAddress, 2);
 			SPI_write(cmdBuffer, 5, false);
-			
-			#if defined(USING_FREERTOS)
-			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
-			while (!isWriteComplete());
-			#endif 
-
-			/* FREERTOS: Safe to return immediately because data pointer is out of function scope */
 			SPI_read(dataOut, len, true);
 
 			if (onComplete)
@@ -245,18 +203,10 @@ namespace Adesto
 
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_WRITE : BUFFER2_WRITE;
 
-
 			/* The full buffer write command is the opcode byte + 3 address bytes. The first address byte is 
 			 * completely ignored and the last two hold the real address. Total TX length is four bytes.*/
 			memcpy(cmdBuffer + 2, (uint8_t*)&startAddress, 2);
 			SPI_write(cmdBuffer, 4, false);
-
-			#if defined(USING_FREERTOS)
-			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
-			while (!isWriteComplete()); 
-			#endif 
-
-			/* FREERTOS: Safe to return immediately because data pointer is out of function scope */
 			SPI_write(dataIn, len, true);
 
 			if (onComplete)
@@ -293,13 +243,6 @@ namespace Adesto
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? MAIN_MEM_PAGE_PGM_THR_BUFFER1_W_ERASE : MAIN_MEM_PAGE_PGM_THR_BUFFER2_W_ERASE;
 
 			SPI_write(cmdBuffer, 4, false);
-
-			#if defined(USING_FREERTOS)
-			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
-			while (!isWriteComplete());
-			#endif 
-
-			/* FREERTOS: Safe to return immediately because data pointer is out of function scope */
 			SPI_write(dataIn, len, true);
 
 			if (onComplete)
@@ -320,13 +263,6 @@ namespace Adesto
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? AUTO_PAGE_REWRITE1 : AUTO_PAGE_REWRITE2;
 
 			SPI_write(cmdBuffer, 4, false);
-
-			#if defined(USING_FREERTOS)
-			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
-			while (!isWriteComplete());
-			#endif 
-
-			/* FREERTOS: Safe to return immediately because data pointer is out of function scope */
 			SPI_write(dataIn, len, true);
 
 			if (onComplete)
@@ -347,13 +283,6 @@ namespace Adesto
 			cmdBuffer[0] = MAIN_MEM_BP_PGM_THR_BUFFER1_WO_ERASE;
 
 			SPI_write(cmdBuffer, 4, false);
-
-			#if defined(USING_FREERTOS)
-			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
-			while (!isWriteComplete());
-			#endif 
-
-			/* FREERTOS: Safe to return immediately because data pointer is out of function scope */
 			SPI_write(dataIn, len, true);
 
 			if (onComplete)
@@ -378,8 +307,6 @@ namespace Adesto
 
 				readModifyWrite(BUFFER1, range.page.start, range.page.startPageOffset, dataIn, writeLen);
 
-				volatile uint16_t sreg = readStatusRegister();
-
 				while (!isDeviceReady())
 				{
 					Chimera::delayMilliseconds(chipDelay[device].pageProgramming);
@@ -394,7 +321,7 @@ namespace Adesto
 				{
 					pageWrite(BUFFER1, 0, i, (dataIn + currentByte), pageSize);
 
-					while (!isWriteComplete() && !isDeviceReady())
+					while (!isDeviceReady())
 					{
 						Chimera::delayMilliseconds(chipDelay[device].pageProgramming);
 					}
@@ -410,7 +337,7 @@ namespace Adesto
 				{
 					readModifyWrite(BUFFER1, range.page.end, 0, (dataIn + currentByte), range.page.endPageOffset);
 
-					while (!isWriteComplete() && !isDeviceReady())
+					while (!isDeviceReady())
 					{
 						Chimera::delayMilliseconds(chipDelay[device].pageProgramming);
 					}
@@ -431,14 +358,22 @@ namespace Adesto
 			{
 				MemoryRange range = getWriteReadPages(address, len);
 
-				continuousRead(range.page.start, range.page.startPageOffset, dataOut, len);
+				uint32_t pageNumber = range.page.start;
+				uint16_t pageOffset = range.page.startPageOffset;
 
-				while (!isReadComplete())
-				{
-					Chimera::delayMilliseconds(chipDelay[device].pageProgramming);
-					if (isDeviceReady())
-						break;
-				}
+				/* Shift and mask by either 9 or 8 bits */
+				uint32_t fullAddress = (pageSize == STANDARD_PAGE_SIZE) ? ((pageNumber << 9) | (pageOffset & 0x1FF)) : ((pageNumber << 8) | (pageOffset & 0xFF));
+
+
+				/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 2 dummy bytes.
+				* The dummy bytes are used to initialize the read operation. */
+				cmdBuffer[0] = CONT_ARR_READ_LF;
+				memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
+				SPI_write(cmdBuffer, 4, false);
+				SPI_read(dataOut, len, true);
+
+				if (onComplete)
+					onComplete();
 
 				return FLASH_OK;
 			}
@@ -483,16 +418,7 @@ namespace Adesto
 			cmdBuffer[0] = STATUS_REGISTER_READ;
 
 			SPI_write(cmdBuffer, BYTE_LEN(STATUS_REGISTER_READ), false);
-			
-			#if defined(USING_FREERTOS)
-			while (!isWriteComplete());
-			#endif 
-
 			SPI_read(reg, 2, true);
-
-			#if defined(USING_FREERTOS)
-			while (!isReadComplete());
-			#endif 
 
 			return (uint16_t)((reg[0] << 8) | reg[1]);
 		}
@@ -519,34 +445,40 @@ namespace Adesto
 
 		}
 
-		void AT45::useBinaryPageSize()
+		Adesto::Status AT45::useBinaryPageSize()
 		{
 			uint32_t cmd = CFG_PWR_2_PAGE_SIZE;
 			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
 
 			SPI_write(cmdBuffer, BYTE_LEN(cmd), true);
 
-			//TODO: validate that the value is set 
-
 			//Note: These values appear constant over all AT45 chips
 			pageSize = 256;
 			blockSize = 2048;
 			sectorSize = 65536;
+
+			if (pageSize != getPageSizeConfig())
+				return ERROR_PAGE_SIZE_MISMATCH;
+
+			return FLASH_OK;
 		}
 
-		void AT45::useDataFlashPageSize()
+		Adesto::Status AT45::useDataFlashPageSize()
 		{
 			uint32_t cmd = CFG_STD_FLASH_PAGE_SIZE;
 			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
 
 			SPI_write(cmdBuffer, BYTE_LEN(cmd), true);
 
-			//TODO: validate that the value is set
-
 			//Note: These values appear constant over all AT45 chips
 			pageSize = 264;
 			blockSize = 2112;
 			sectorSize = 67584;
+
+			if (pageSize != getPageSizeConfig())
+				return ERROR_PAGE_SIZE_MISMATCH;
+
+			return FLASH_OK;
 		}
 
 		AT45xx_DeviceInfo AT45::getDeviceInfo()
@@ -557,16 +489,7 @@ namespace Adesto
 
 			cmdBuffer[0] = READ_DEVICE_INFO;
 			SPI_write(cmdBuffer, BYTE_LEN(READ_DEVICE_INFO), false);
-			
-			#if defined(USING_FREERTOS)
-			while (!isWriteComplete());
-			#endif
-			
 			SPI_read(data, 3, true);
-
-			#if defined(USING_FREERTOS)
-			while (!isReadComplete());
-			#endif 
 
 			info.manufacturerID = data[0];
 			info.familyCode = static_cast<FamilyCode>((uint8_t)(data[1] >> 5) & 0xFF);
@@ -594,12 +517,21 @@ namespace Adesto
 		void AT45::SPI_write(uint8_t* data, size_t len, bool disableSS)
 		{
 			spi->write(data, len, disableSS);
+
+			#if defined(USING_FREERTOS)
+			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
+			while (!isWriteComplete());
+			#endif 
 		}
 
 		void AT45::SPI_read(uint8_t* data, size_t len, bool disableSS)
 		{
 			//Use cmdBuffer array as source of dummy bytes for the TX/RX operation.
-			spi->write(cmdBuffer, data, len, disableSS);
+			spi->write(cmdBuffer + sizeof(cmdBuffer), data, len, disableSS);
+
+			#if defined(USING_FREERTOS)
+			while (!isReadComplete());
+			#endif 
 		}
 
 		AT45::MemoryRange AT45::getErasableSections(uint32_t address, size_t len)
@@ -855,6 +787,36 @@ namespace Adesto
 			};
 
 			return address;
+		}
+
+		uint32_t AT45::getFlashSize()
+		{
+			switch (info.densityCode)
+			{
+			case DENSITY_2MBIT:
+				return 262144;
+				break;
+
+			case DENSITY_4MBIT:
+				return 524288;
+				break;
+
+			case DENSITY_8MBIT:
+				return 1048576;
+				break;
+
+			case DENSITY_16MBIT:
+				return 2097152;
+				break;
+
+			case DENSITY_32MBIT:
+				return 4194304;
+				break;
+
+			case DENSITY_64MBIT:
+				return 8388608;
+				break;
+			}
 		}
 	}
 }

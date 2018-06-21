@@ -1,5 +1,5 @@
-/* Boost Includes */
-#include <boost/make_shared.hpp>
+/* C/C++ Includes */
+#include <memory>
 
 #include "at45db081.hpp"
 
@@ -99,7 +99,7 @@ namespace Adesto
 			device = chip;
 			addressBytes = addressFormat[device].numAddressBytes;
 
-			spi = boost::make_shared<SPIClass>(spiChannel);
+			spi = std::make_shared<SPIClass>(spiChannel);
 
 			setup.clockFrequency = 1000000;
 			setup.bitOrder = MSB_FIRST;

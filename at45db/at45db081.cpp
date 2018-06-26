@@ -2,11 +2,13 @@
 #include <memory>
 
 /* Chimera Includes */
+#include <Chimera/logging.hpp>
 #include <Chimera/utilities.hpp>
 
 #include "at45db081.hpp"
 
 using namespace Chimera::SPI;
+using namespace Chimera::Logging;
 
 #define BYTE_LEN(x) (sizeof(x)/sizeof(uint8_t))
 #define STANDARD_PAGE_SIZE 264
@@ -57,9 +59,6 @@ struct FlashDelay
 /* Useful for determining any runtime errors */
 #define ADDRESS_OVERRUN			(1u << 0)
 #define INVALID_SECTION_NUMBER	(1u << 1)
-
-
-
 
 namespace Adesto
 {
@@ -253,6 +252,33 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
+		Adesto::Status AT45::readModifyWriteManual(SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete)
+		{
+			Adesto::Status errorCode = FLASH_OK;
+
+			uint8_t tempBuff[STANDARD_PAGE_SIZE];
+			memset(tempBuff, 0xFF, STANDARD_PAGE_SIZE);
+
+			/* Read the data from the current page */
+			directPageRead(pageNumber, 0x0000, tempBuff, pageSize);
+
+			while (!isReadComplete())
+			{
+				Chimera::delayMilliseconds(1);
+			}
+
+			/* Modify the requested data */
+			memcpy(tempBuff + pageOffset, dataIn, len);
+
+			/* Write the modified data back with built in erase */
+			pageWrite(bufferNumber, 0x0000, pageNumber, tempBuff, pageSize);
+
+			if (onComplete)
+				onComplete();
+
+			return errorCode;
+		}
+
 		Adesto::Status AT45::readModifyWrite(SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete)
 		{
 			/* Build up the main memory page address and byte offset */
@@ -260,10 +286,7 @@ namespace Adesto
 			uint32_t addressBitMask = (1u << config->addressBits) - 1u;
 			uint32_t offsetBitMask = (1u << config->dummyBitsLSB) - 1u;
 			uint32_t fullAddress = ((pageNumber & addressBitMask) << config->dummyBitsLSB) | (offsetBitMask & pageOffset);
-			//memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, addressBytes);
-			cmdBuffer[1] = (fullAddress & (0xFF << 16)) >> 16;
-			cmdBuffer[2] = (fullAddress & (0xFF << 8)) >> 8;
-			cmdBuffer[3] = (fullAddress & (0xFF));
+			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, addressBytes);
 
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? AUTO_PAGE_REWRITE1 : AUTO_PAGE_REWRITE2;
 
@@ -310,7 +333,7 @@ namespace Adesto
 				if (len < writeLen)
 					writeLen = len;
 
-				readModifyWrite(BUFFER1, range.page.start, range.page.startPageOffset, dataIn, writeLen);
+				readModifyWriteManual(BUFFER1, range.page.start, range.page.startPageOffset, dataIn, writeLen);
 
 				while (!isDeviceReady())
 				{
@@ -318,6 +341,7 @@ namespace Adesto
 				}
 				currentByte += writeLen;
 
+				/* Ensure there were no programming errors */
 				if (isErasePgmError())
 					return ERROR_WRITE_FAILURE;
 
@@ -340,7 +364,7 @@ namespace Adesto
 				/* Handles the last, likely partial page */
 				if ((range.page.start != range.page.end) && (range.page.endPageOffset != 0))
 				{
-					readModifyWrite(BUFFER1, range.page.end, 0, (dataIn + currentByte), range.page.endPageOffset);
+					readModifyWriteManual(BUFFER1, range.page.end, 0, (dataIn + currentByte), range.page.endPageOffset);
 
 					while (!isDeviceReady())
 					{
@@ -373,13 +397,8 @@ namespace Adesto
 				/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 2 dummy bytes.
 				* The dummy bytes are used to initialize the read operation. */
 				cmdBuffer[0] = CONT_ARR_READ_LF;
-				cmdBuffer[1] = (fullAddress & (0xFF << 16)) >> 16;
-				cmdBuffer[2] = (fullAddress & (0xFF << 8)) >> 8;
-				cmdBuffer[3] = (fullAddress & (0xFF));
-				
-				
+				memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
 
-				//memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
 				SPI_write(cmdBuffer, 4, false);
 				SPI_read(dataOut, len, true);
 
@@ -419,31 +438,46 @@ namespace Adesto
 		uint16_t AT45::getPageSizeConfig()
 		{
 			auto reg = readStatusRegister();
-			return (reg & PAGE_SIZE_CONFIG) ? 256 : 264;
+			return (reg & PAGE_SIZE_CONFIG_Pos) ? 256 : 264;
 		}
 
-		uint16_t AT45::readStatusRegister()
+		uint16_t AT45::readStatusRegister(StatusRegister* reg)
 		{
-			uint8_t reg[2];
+			uint8_t val[2];
 
 			cmdBuffer[0] = STATUS_REGISTER_READ;
 
 			SPI_write(cmdBuffer, BYTE_LEN(STATUS_REGISTER_READ), false);
-			SPI_read(reg, 2, true);
+			SPI_read(val, 2, true);
 
-			return (uint16_t)((reg[0] << 8) | reg[1]);
+			uint16_t tmp = (uint16_t)((val[0] << 8) | val[1]);
+
+			if (reg)
+			{
+				reg->compareResult				= tmp & COMPARE_RESULT_Pos;
+				reg->deviceReady				= tmp & READY_BUSY_Pos;
+				reg->eraseProgramError			= tmp & ERASE_PGM_ERROR_Pos;
+				reg->eraseSuspend				= tmp & ERASE_SUSPEND_Pos;
+				reg->pageSizeConfig				= tmp & PAGE_SIZE_CONFIG_Pos;
+				reg->pgmSuspendStatusB1			= tmp & BUFF1_PGM_SUSPEND_Pos;
+				reg->pgmSuspendStatusB2			= tmp & BUFF2_PGM_SUSPEND_Pos;
+				reg->sectorLockdownEnabled		= tmp & SECTOR_LOCKDOWN_EN_Pos;
+				reg->sectorProtectionStatus		= tmp & SECTOR_PROTECTION_Pos;
+			}
+
+			return tmp;
 		}
 
-		bool AT45::isDeviceReady()
+		bool AT45::isDeviceReady(StatusRegister* reg)
 		{
-			auto reg = readStatusRegister();
-			return (reg & READY_BUSY);
+			auto val = readStatusRegister(reg);
+			return (val & READY_BUSY_Pos);
 		}
 
-		bool AT45::isErasePgmError()
+		bool AT45::isErasePgmError(StatusRegister* reg)
 		{
-			auto reg = readStatusRegister();
-			return (reg & ERASE_PGM_ERROR);
+			auto val = readStatusRegister(reg);
+			return (val & ERASE_PGM_ERROR_Pos);
 		}
 
 		bool AT45::isProgramComplete()

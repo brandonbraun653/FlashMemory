@@ -70,17 +70,30 @@ namespace Adesto
 
 	namespace NORFlash
 	{
-		enum StatusRegister : uint16_t
+		enum StatusRegisterBitPos : uint16_t
 		{
-			READY_BUSY			= (1u << 15),
-			COMPARE_RESULT		= (1u << 14),
-			SECTOR_PROTECTION	= (1u << 9),
-			PAGE_SIZE_CONFIG	= (1u << 8),
-			ERASE_PGM_ERROR		= (1u << 5),
-			SECTOR_LOCKDOWN_EN	= (1u << 3),
-			BUFF2_PGM_SUSPEND	= (1u << 2),
-			BUFF1_PGM_SUSPEND	= (1u << 1),
-			ERASE_SUSPEND		= (1u << 0)
+			READY_BUSY_Pos			= (1u << 15),
+			COMPARE_RESULT_Pos		= (1u << 14),
+			SECTOR_PROTECTION_Pos	= (1u << 9),
+			PAGE_SIZE_CONFIG_Pos	= (1u << 8),
+			ERASE_PGM_ERROR_Pos		= (1u << 5),
+			SECTOR_LOCKDOWN_EN_Pos	= (1u << 3),
+			BUFF2_PGM_SUSPEND_Pos	= (1u << 2),
+			BUFF1_PGM_SUSPEND_Pos	= (1u << 1),
+			ERASE_SUSPEND_Pos		= (1u << 0)
+		};
+
+		struct StatusRegister
+		{
+			bool deviceReady = false;
+			bool compareResult = false;
+			bool sectorProtectionStatus = false;
+			bool pageSizeConfig = false;
+			bool eraseProgramError = false;
+			bool sectorLockdownEnabled = false;
+			bool pgmSuspendStatusB1 = false;
+			bool pgmSuspendStatusB2 = false;
+			bool eraseSuspend = false;
 		};
 
 		/**	Provides a user friendly interface for Adesto flash memory chips of the AT45 family. The class supports asynchronous operation
@@ -179,7 +192,11 @@ namespace Adesto
 			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
 			 *	@return FLASH_OK
 			 **/
-			Adesto::Status readModifyWrite(SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
+			Adesto::Status readModifyWriteManual(SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
+			
+			
+			Adesto::Status readModifyWrite(SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete = nullptr) \
+				__attribute__((deprecated("Currently the opcode associated with this command fails. Use readModifyWriteManual instead.")));
 
 			/** Utilizes SRAM buffer 1 to write a fixed number of bytes to a pre-erased page of memory. Only the bytes written will be programmed.
 			 *	If the end of the buffer is reached before all bytes are written, the data will be wrapped around to the beginning of the buffer.
@@ -268,19 +285,22 @@ namespace Adesto
 			uint16_t getPageSizeConfig();
 
 			/** Grabs the current status register
+			 *	@param[out]	reg	Optional argument to return back all status register parameters that were read, but in struct format for easy debugging
 			 *	@return status register value
 			 **/
-			uint16_t readStatusRegister();
+			uint16_t readStatusRegister(StatusRegister* reg = nullptr);
 
 			/** Queries the flash chip status register and checks if the device is ready
+			 *	@param[out]	reg	Optional argument to return back all status register parameters that were read
 			 *	@return true if ready, false if not
 			 **/
-			bool isDeviceReady();
+			bool isDeviceReady(StatusRegister* reg = nullptr);
 
-			/** Queries the flash chip status register and checks if an error occurred during programming or erasing 
+			/** Queries the flash chip status register and checks if an error occurred during programming or erasing
+			 *	@param[out]	reg	Optional argument to return back all status register parameters that were read
 			 *	@return true if error, false if not
 			 **/
-			bool isErasePgmError();
+			bool isErasePgmError(StatusRegister* reg = nullptr);
 
 			bool isProgramComplete();
 			
@@ -295,12 +315,12 @@ namespace Adesto
 			 **/
 			AT45xx_DeviceInfo getDeviceInfo();
 
-			/**	Checks an internal semaphore to see if a read operation was completed
+			/**	Checks an internal semaphore to see if an SPI read operation was completed
 			 *	@return true if complete, false if not
 			 **/
 			bool isReadComplete();
 
-			/**	Checks an internal semaphore to see if a write operation was completed
+			/**	Checks an internal semaphore to see if an SPI write operation was completed
 			 *	@return true if complete, false if not
 			 **/
 			bool isWriteComplete();

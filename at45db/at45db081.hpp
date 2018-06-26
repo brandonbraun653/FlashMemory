@@ -4,6 +4,7 @@
 
 /* Standard C++ Includes */
 #include <stdlib.h>
+#include <memory>
 
 /* Boost Includes */
 #include <boost/array.hpp>
@@ -64,10 +65,6 @@ namespace Adesto
 		size_t end;
 		bool rangeValid = false;
 	};
-
-
-
-
 
 	typedef void(*func_t)(void);
 
@@ -298,7 +295,6 @@ namespace Adesto
 			 **/
 			AT45xx_DeviceInfo getDeviceInfo();
 
-			#if defined(USING_FREERTOS)
 			/**	Checks an internal semaphore to see if a read operation was completed
 			 *	@return true if complete, false if not
 			 **/
@@ -308,13 +304,12 @@ namespace Adesto
 			 *	@return true if complete, false if not
 			 **/
 			bool isWriteComplete();
-			#endif
 
-
-			uint32_t maxAddress = 0;
+			/* Returns the capacity of the discovered chip in bytes */
+			uint32_t getFlashSize();
 
 		private:
-			Chimera::SPI::SPIClass_sPtr spi;	/**< SPI object used for talking with the flash chip */
+			Chimera::SPI::SPIClass_uPtr spi;	/**< SPI object used for talking with the flash chip */
 			Chimera::SPI::Setup setup;			/**< SPI initialization settings */
 			
 			FlashChip device;					/**< Holds the device model number */
@@ -325,6 +320,8 @@ namespace Adesto
 			SemaphoreHandle_t singleTXWakeup;
 			SemaphoreHandle_t singleTXRXWakeup;
 			#endif 
+			bool writeComplete = false;
+			bool readComplete = false;
 
 			//Note: These values appear constant over all AT45 chips 
 			size_t pageSize = 264;				/**< Keeps track of the current page size configuration in bytes */
@@ -383,10 +380,10 @@ namespace Adesto
 			/* Gets a section number's starting address in memory */
 			uint32_t getSectionStartAddress(FlashSection section, uint32_t sectionNumber);
 
-			/* Returns the capacity of the discovered chip in bytes */
-			uint32_t getFlashSize();
+			
 		};
-		typedef boost::shared_ptr<AT45> AT45_sPtr;
+		typedef std::shared_ptr<AT45> AT45_sPtr;
+		typedef std::unique_ptr<AT45> AT45_uPtr;
 	}
 }
 #endif /* AT45DB081_HPP */

@@ -1,6 +1,9 @@
 /* C/C++ Includes */
 #include <memory>
 
+/* Chimera Includes */
+#include <Chimera/utilities.hpp>
+
 #include "at45db081.hpp"
 
 using namespace Chimera::SPI;
@@ -99,7 +102,7 @@ namespace Adesto
 			device = chip;
 			addressBytes = addressFormat[device].numAddressBytes;
 
-			spi = std::make_shared<SPIClass>(spiChannel);
+			spi = Chimera::make_unique<SPIClass>(spiChannel);
 
 			setup.clockFrequency = 1000000;
 			setup.bitOrder = MSB_FIRST;
@@ -148,8 +151,7 @@ namespace Adesto
 			/*--------------------------------------
 			* Initialize various other settings
 			*-------------------------------------*/
-			maxAddress = getFlashSize();
-
+			//Currently none...
 
 			return useBinaryPageSize();
 		}
@@ -258,7 +260,10 @@ namespace Adesto
 			uint32_t addressBitMask = (1u << config->addressBits) - 1u;
 			uint32_t offsetBitMask = (1u << config->dummyBitsLSB) - 1u;
 			uint32_t fullAddress = ((pageNumber & addressBitMask) << config->dummyBitsLSB) | (offsetBitMask & pageOffset);
-			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, addressBytes);
+			//memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, addressBytes);
+			cmdBuffer[1] = (fullAddress & (0xFF << 16)) >> 16;
+			cmdBuffer[2] = (fullAddress & (0xFF << 8)) >> 8;
+			cmdBuffer[3] = (fullAddress & (0xFF));
 
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? AUTO_PAGE_REWRITE1 : AUTO_PAGE_REWRITE2;
 
@@ -368,7 +373,13 @@ namespace Adesto
 				/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 2 dummy bytes.
 				* The dummy bytes are used to initialize the read operation. */
 				cmdBuffer[0] = CONT_ARR_READ_LF;
-				memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
+				cmdBuffer[1] = (fullAddress & (0xFF << 16)) >> 16;
+				cmdBuffer[2] = (fullAddress & (0xFF << 8)) >> 8;
+				cmdBuffer[3] = (fullAddress & (0xFF));
+				
+				
+
+				//memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
 				SPI_write(cmdBuffer, 4, false);
 				SPI_read(dataOut, len, true);
 
@@ -500,22 +511,45 @@ namespace Adesto
 			return info;
 		}
 
-		#if defined(USING_FREERTOS)
+		
 		bool AT45::isReadComplete()
 		{
-			return xSemaphoreTake(singleTXRXWakeup, 0);
+			//If not using freeRTOS, spi is in blocking mode. Any read will be complete before calling this function.
+			#if defined(USING_FREERTOS)
+			if ((xSemaphoreTake(singleTXRXWakeup, 0) == pdPASS) || readComplete)
+			{
+				readComplete = true;
+				return true;
+			}
+			else
+				return false;
+			#else
+			return true;
+			#endif
 		}
 
 		bool AT45::isWriteComplete()
 		{
-			return xSemaphoreTake(singleTXWakeup, 0);
+			//If not using freeRTOS, spi is in blocking mode. Any write will be complete before calling this function.
+			#if defined(USING_FREERTOS)
+			if ((xSemaphoreTake(singleTXWakeup, 0) == pdPASS) || writeComplete)
+			{
+				writeComplete = true;
+				return true;
+			}
+			else
+				return false;
+			#else
+			return true;
+			#endif
 		}
-		#endif
+		
 
 
 
 		void AT45::SPI_write(uint8_t* data, size_t len, bool disableSS)
 		{
+			writeComplete = false;
 			spi->write(data, len, disableSS);
 
 			#if defined(USING_FREERTOS)
@@ -526,6 +560,8 @@ namespace Adesto
 
 		void AT45::SPI_read(uint8_t* data, size_t len, bool disableSS)
 		{
+			readComplete = false;
+
 			//Use cmdBuffer array as source of dummy bytes for the TX/RX operation.
 			spi->write(cmdBuffer + sizeof(cmdBuffer), data, len, disableSS);
 

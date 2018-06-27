@@ -119,7 +119,7 @@ namespace Adesto
 			#endif
 		}
 
-		Adesto::Status AT45::initialize(uint32_t clockFreq)
+		Adesto::Status AT45::initialize(uint32_t userClockFreq)
 		{
 			if (spi->begin(setup) != SPI_OK)
 				return ERROR_SPI_INIT_FAILED;
@@ -141,7 +141,7 @@ namespace Adesto
 			if (info.manufacturerID != JEDEC_CODE)
 				return ERROR_UNKNOWN_JEDEC_CODE;
 
-			spi->updateClockFrequency(clockFreq);
+			spi->updateClockFrequency(userClockFreq);
 			auto hiFreqInfo = getDeviceInfo();
 			
 			if (memcmp(&lowFreqInfo, &hiFreqInfo, sizeof(AT45xx_DeviceInfo)) != 0)
@@ -150,21 +150,26 @@ namespace Adesto
 			/*--------------------------------------
 			* Initialize various other settings
 			*-------------------------------------*/
-			//Currently none...
+			/* Check what frequency we are actually getting */
+			clockFrequency = spi->getClockFrequency();	
+
+			float clockErr = abs((float)clockFrequency - (float)userClockFreq) / (float)userClockFreq;
+			if (clockErr > maxClockErr)
+			{
+				Console.log(Level::WARN, "Flash chip SPI clock freq not met. Tried: %.5f MHz, Got: %.5f MHz\r\n", 
+					((float)userClockFreq / 1000000.0f), ((float)clockFrequency / 1000000.0f));
+			}
 
 			return useBinaryPageSize();
 		}
 
-		Adesto::Status AT45::directPageRead(uint32_t pageNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete)
+		Adesto::Status AT45::directPageRead(uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataOut, size_t len, func_t onComplete /*= nullptr*/)
 		{
 			cmdBuffer[0] = MAIN_MEM_PAGE_READ;
-
-			/* Shift and mask by either 9 or 8 bits */
-			uint32_t fullAddress = (pageSize == STANDARD_PAGE_SIZE) ? ((pageNumber << 9) | (startAddress & 0x1FF)) : ((pageNumber << 8) | (startAddress & 0xFF));
+			buildReadWriteCommand(pageNumber, pageOffset);
 
 			/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 4 dummy bytes.
 			 * The dummy bytes are used to initialize the read operation. */
-			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
 			SPI_write(cmdBuffer, 8, false);
 			SPI_read(dataOut, len, true);
 
@@ -176,18 +181,11 @@ namespace Adesto
 
 		Adesto::Status AT45::bufferRead(SRAMBuffer bufferNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete)
 		{
-			/* Mask off the first 8 or 9 bits */
-			startAddress &= (pageSize == STANDARD_PAGE_SIZE) ? 0x1FF : 0xFF;
+			if(clockFrequency > 50000000)	//50 MHz
+				cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_READ_HF : BUFFER2_READ_HF;
+			else
+				cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_READ_LF : BUFFER2_READ_LF;
 
-			cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_READ_HF : BUFFER2_READ_HF;
-
-			/* Default read will use the High Frequency mode, so an extra dummy byte is needed on the
-			 * end of the address. This yields a full 32 bit address with the first 15 or 16 bits ignored,
-			 * the next 9 or 8 bits as the actual address within the page, and then the last 8 bits ignored.
-			 *
-			 * In practice this means that in the cmdBuffer, byte 1 holds the command, 3 & 4 hold the address,
-			 * and 2 & 5 are completely ignored by the flash chip.  Total TX length is five bytes. */
-			memcpy(cmdBuffer + 2, (uint8_t*)&startAddress, 2);
 			SPI_write(cmdBuffer, 5, false);
 			SPI_read(dataOut, len, true);
 
@@ -199,14 +197,11 @@ namespace Adesto
 
 		Adesto::Status AT45::bufferLoad(SRAMBuffer bufferNumber, uint16_t startAddress, uint8_t* dataIn, size_t len, func_t onComplete)
 		{
-			/* Mask off the first 9 or 8 bits */
-			startAddress &= (pageSize == STANDARD_PAGE_SIZE) ? 0x1FF : 0xFF;
-
+			/* In this case, the page number input is ignored by the flash chip. Only the offset within the buffer is valid.
+			 * See datasheet section labeled 'Buffer Write' for more details. */
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_WRITE : BUFFER2_WRITE;
-
-			/* The full buffer write command is the opcode byte + 3 address bytes. The first address byte is 
-			 * completely ignored and the last two hold the real address. Total TX length is four bytes.*/
-			memcpy(cmdBuffer + 2, (uint8_t*)&startAddress, 2);
+			buildReadWriteCommand(0x0000, startAddress);
+			
 			SPI_write(cmdBuffer, 4, false);
 			SPI_write(dataIn, len, true);
 
@@ -223,7 +218,10 @@ namespace Adesto
 			else
 				cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_TO_MAIN_MEM_PAGE_PGM_WO_ERASE : BUFFER2_TO_MAIN_MEM_PAGE_PGM_WO_ERASE;
 
-			memcpy(cmdBuffer + 1, buildAddressCommand(PAGE, pageNumber), addressBytes);
+			/* This command is opposite of 'bufferLoad()'. Only the page number is valid and then offset is ignored. 
+			 * See datasheet section labeled 'Buffer to Main Memory Page Program with/without Built-In Erase' for more details. */
+			buildReadWriteCommand(pageNumber, 0x0000);
+
 			SPI_write(cmdBuffer, 4, true);
 
 			if (onComplete)
@@ -234,14 +232,9 @@ namespace Adesto
 
 		Adesto::Status AT45::pageWrite(SRAMBuffer bufferNumber, uint16_t bufferOffset, uint16_t pageNumber, uint8_t* dataIn, size_t len, func_t onComplete)
 		{
-			/* Build up the main memory page address and SRAM buffer byte offset */
-			const AddressDescriptions* config = (pageSize == STANDARD_PAGE_SIZE) ? &addressFormat[device].page.standardSize : &addressFormat[device].page.binarySize;
-			uint32_t addressBitMask = (1u << config->addressBits) - 1u;
-			uint32_t offsetBitMask = (1u << config->dummyBitsLSB) - 1u;
-			uint32_t fullAddress = ((pageNumber & addressBitMask) << config->dummyBitsLSB) | (offsetBitMask & bufferOffset);
-			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, addressBytes);
-
+			/* Generate the full command sequence. See data sheet section labeled 'Main Memory Page Program through Buffer with Built-In Erase' */
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? MAIN_MEM_PAGE_PGM_THR_BUFFER1_W_ERASE : MAIN_MEM_PAGE_PGM_THR_BUFFER2_W_ERASE;
+			buildReadWriteCommand(pageNumber, bufferOffset);
 
 			SPI_write(cmdBuffer, 4, false);
 			SPI_write(dataIn, len, true);
@@ -281,14 +274,9 @@ namespace Adesto
 
 		Adesto::Status AT45::readModifyWrite(SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete)
 		{
-			/* Build up the main memory page address and byte offset */
-			const AddressDescriptions* config = (pageSize == STANDARD_PAGE_SIZE) ? &addressFormat[device].page.standardSize : &addressFormat[device].page.binarySize;
-			uint32_t addressBitMask = (1u << config->addressBits) - 1u;
-			uint32_t offsetBitMask = (1u << config->dummyBitsLSB) - 1u;
-			uint32_t fullAddress = ((pageNumber & addressBitMask) << config->dummyBitsLSB) | (offsetBitMask & pageOffset);
-			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, addressBytes);
-
+			/* Generate the full command sequence. See datasheet section labeled 'Read-Modify-Write' */
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? AUTO_PAGE_REWRITE1 : AUTO_PAGE_REWRITE2;
+			buildReadWriteCommand(pageNumber, pageOffset);
 
 			SPI_write(cmdBuffer, 4, false);
 			SPI_write(dataIn, len, true);
@@ -299,16 +287,11 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::byteWrite(uint16_t bufferOffset, uint16_t pageNumber, uint8_t* dataIn, size_t len, func_t onComplete)
+		Adesto::Status AT45::byteWrite(uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete)
 		{
-			/* Build up the main memory page address and SRAM buffer byte offset */
-			const AddressDescriptions* config = (pageSize == STANDARD_PAGE_SIZE) ? &addressFormat[device].page.standardSize : &addressFormat[device].page.binarySize;
-			uint32_t addressBitMask = (1u << config->addressBits) - 1u;
-			uint32_t offsetBitMask = (1u << config->dummyBitsLSB) - 1u;
-			uint32_t fullAddress = ((pageNumber & addressBitMask) << config->dummyBitsLSB) | (offsetBitMask & bufferOffset);
-			memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, addressBytes);
-
+			/* Generates the full command sequence. See datasheet section labeled 'Main Memory Byte/Page Program through Buffer 1 without Built-In Erase' */
 			cmdBuffer[0] = MAIN_MEM_BP_PGM_THR_BUFFER1_WO_ERASE;
+			buildReadWriteCommand(pageNumber, pageOffset);
 
 			SPI_write(cmdBuffer, 4, false);
 			SPI_write(dataIn, len, true);
@@ -385,21 +368,38 @@ namespace Adesto
 		{
 			if (len)
 			{
+				/* Calculate the correct starting page and offset to begin reading from in memory */
 				MemoryRange range = getWriteReadPages(address, len);
-
 				uint32_t pageNumber = range.page.start;
 				uint16_t pageOffset = range.page.startPageOffset;
 
-				/* Shift and mask by either 9 or 8 bits */
-				uint32_t fullAddress = (pageSize == STANDARD_PAGE_SIZE) ? ((pageNumber << 9) | (pageOffset & 0x1FF)) : ((pageNumber << 8) | (pageOffset & 0xFF));
+				buildReadWriteCommand(pageNumber, pageOffset);
+			
+				/* The command is comprised of an opcode (1 byte), an address (3 bytes), and X dummy bytes.
+				 * The dummy bytes are used to initialize the read operation for higher frequencies */
+				size_t numDummyBytes = 0;
 
+				if(clockFrequency > 50000000) //50MHz
+					cmdBuffer[0] = CONT_ARR_READ_HF1;
+				else
+					cmdBuffer[0] = CONT_ARR_READ_LF;
 
-				/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 2 dummy bytes.
-				* The dummy bytes are used to initialize the read operation. */
-				cmdBuffer[0] = CONT_ARR_READ_LF;
-				memcpy(cmdBuffer + 1, (uint8_t*)&fullAddress, 3);
+				switch (cmdBuffer[0])
+				{
+				case CONT_ARR_READ_HF1:
+					numDummyBytes = 1;
+					break;
 
-				SPI_write(cmdBuffer, 4, false);
+				case CONT_ARR_READ_HF2:
+					numDummyBytes = 2;
+					break;
+
+				default: 
+					numDummyBytes = 0; 
+					break;
+				}
+
+				SPI_write(cmdBuffer, 4 + numDummyBytes, false);
 				SPI_read(dataOut, len, true);
 
 				if (onComplete)
@@ -480,14 +480,36 @@ namespace Adesto
 			return (val & ERASE_PGM_ERROR_Pos);
 		}
 
-		bool AT45::isProgramComplete()
+		bool AT45::isReadComplete()
 		{
-
+			//If not using freeRTOS, spi is in blocking mode. Any read will be complete before calling this function.
+			#if defined(USING_FREERTOS)
+			if ((xSemaphoreTake(singleTXRXWakeup, 0) == pdPASS) || readComplete)
+			{
+				readComplete = true;
+				return true;
+			}
+			else
+				return false;
+			#else
+			return true;
+			#endif
 		}
 
-		bool AT45::isEraseComplete()
+		bool AT45::isWriteComplete()
 		{
-
+			//If not using freeRTOS, spi is in blocking mode. Any write will be complete before calling this function.
+			#if defined(USING_FREERTOS)
+			if ((xSemaphoreTake(singleTXWakeup, 0) == pdPASS) || writeComplete)
+			{
+				writeComplete = true;
+				return true;
+			}
+			else
+				return false;
+			#else
+			return true;
+			#endif
 		}
 
 		Adesto::Status AT45::useBinaryPageSize()
@@ -544,42 +566,6 @@ namespace Adesto
 
 			return info;
 		}
-
-		
-		bool AT45::isReadComplete()
-		{
-			//If not using freeRTOS, spi is in blocking mode. Any read will be complete before calling this function.
-			#if defined(USING_FREERTOS)
-			if ((xSemaphoreTake(singleTXRXWakeup, 0) == pdPASS) || readComplete)
-			{
-				readComplete = true;
-				return true;
-			}
-			else
-				return false;
-			#else
-			return true;
-			#endif
-		}
-
-		bool AT45::isWriteComplete()
-		{
-			//If not using freeRTOS, spi is in blocking mode. Any write will be complete before calling this function.
-			#if defined(USING_FREERTOS)
-			if ((xSemaphoreTake(singleTXWakeup, 0) == pdPASS) || writeComplete)
-			{
-				writeComplete = true;
-				return true;
-			}
-			else
-				return false;
-			#else
-			return true;
-			#endif
-		}
-		
-
-
 
 		void AT45::SPI_write(uint8_t* data, size_t len, bool disableSS)
 		{
@@ -716,8 +702,7 @@ namespace Adesto
 		void AT45::eraseSector(uint32_t sectorNumber)
 		{
 			cmdBuffer[0] = SECTOR_ERASE;
-
-			memcpy(cmdBuffer + 1, buildAddressCommand(SECTOR, sectorNumber), addressFormat[device].numAddressBytes);
+			buildEraseCommand(SECTOR, sectorNumber);
 
 			SPI_write(cmdBuffer, (BYTE_LEN(SECTOR_ERASE) + addressBytes), true);
 		}
@@ -725,8 +710,7 @@ namespace Adesto
 		void AT45::eraseBlock(uint32_t blockNumber)
 		{
 			cmdBuffer[0] = BLOCK_ERASE;
-
-			memcpy(cmdBuffer + 1, buildAddressCommand(BLOCK, blockNumber), addressFormat[device].numAddressBytes);
+			buildEraseCommand(BLOCK, blockNumber);
 
 			SPI_write(cmdBuffer, (BYTE_LEN(BLOCK_ERASE) + addressBytes), true);
 		}
@@ -734,13 +718,63 @@ namespace Adesto
 		void AT45::erasePage(uint32_t pageNumber)
 		{
 			cmdBuffer[0] = PAGE_ERASE;
-
-			memcpy(cmdBuffer + 1, buildAddressCommand(PAGE, pageNumber), addressFormat[device].numAddressBytes);
+			buildEraseCommand(PAGE, pageNumber);
 
 			SPI_write(cmdBuffer, (BYTE_LEN(PAGE_ERASE) + addressBytes), true);
 		}
 
-		uint8_t* AT45::buildAddressCommand(FlashSection section, uint32_t sectionNumber)
+
+		/** Generates the appropriate command sequence for several read and write operations, automatically
+		 *	writing to the class member 'cmdBuffer'.
+		 *	@param[in]	pageNumber	The desired page number in memory
+		 *	@param[in]	offset		The desired offset within the page
+		 *
+		 *	This command only works for several types of operations:
+		 *		. Direct Page Read (opcodes: 0xD2h)
+		 *		. Buffer Read (opcodes: 0xD1h, 0xD3h, 0xD4h, 0xD6h)
+		 *		. Buffer Write (opcodes: 0x84h, 0x87h)
+		 *		. Main Memory Page Program through Buffer with Built-In Erase (opcodes: 0x82h, 0x85h)
+		 *		. Main Memory Page Program through Buffer without Built-In Erase (opcodes: 0x88h, 0x89h)
+		 *		. Main Memory Byte/Page Program through Buffer 1 without Built-In Erase (opcodes: 0x02h)
+		 *		. Read-Modify-Write (opcodes: 0x58h, 0x59h)
+		 **/
+		void AT45::buildReadWriteCommand(uint16_t pageNumber, uint16_t offset)
+		{
+			/* Grab the correct page configuration. This informs the code how much bit shifting to apply */
+			const AddressDescriptions* config;
+			if (pageSize == STANDARD_PAGE_SIZE)
+				config = &addressFormat[device].page.standardSize;
+			else
+				config = &addressFormat[device].page.binarySize;
+
+			/* Generate masks of the correct bit width to clean up the input variables */
+			uint32_t addressBitMask = (1u << config->addressBits) - 1u;
+			uint32_t offsetBitMask  = (1u << config->dummyBitsLSB) - 1u;
+
+			/*	The full address is really only 3 bytes wide. They are set up as follows, with 'a' == address bit, 
+			 *	'o' == offset bit and 'x' == don't care. This is the exact order in which it must be transmitted. (ie MSB first)
+			 *								 Byte 1 | Byte 2 | Byte 3
+			 *		For 264 byte page size: xxxaaaaa|aaaaaaao|oooooooo
+			 *		For 256 byte page size: xxxxaaaa|aaaaaaaa|oooooooo
+			 */
+			uint32_t fullAddress = ((pageNumber & addressBitMask) << config->dummyBitsLSB) | (offsetBitMask & offset);
+
+
+			/*	Note: Cannot use memcpy because it reverses the byte order expected by the flash chip.
+			 *	For example, if the value of 'fullAddress' were 0xAABBCC, the memcpy would put the values into the cmdBuffer as 0xCCBBAA.
+			 *	This is correct as far as the MCU is concerned, but the flash chip needs the data exactly as calculated: 0xAABBCC
+			 */
+			cmdBuffer[1] = (fullAddress & 0xFF0000) >> 16;
+			cmdBuffer[2] = (fullAddress & 0x00FF00) >> 8;
+			cmdBuffer[3] =  fullAddress & 0x0000FF;
+		}
+
+		/** Creates the command sequence needed to erase a particular flash section. Automatically overwrites the 
+		 *	class member 'cmdBuffer' with the appropriate data.
+		 *	@param[in]	section			What type of section to erase (page, block, etc)
+		 *	@param[in]	sectionNumber	Which index of that section type to erase (0, 1, 2, etc)
+		 **/
+		void AT45::buildEraseCommand(FlashSection section, uint32_t sectionNumber)
 		{
 			uint32_t fullAddress = 0u;
 			const AddressDescriptions* config;
@@ -801,9 +835,13 @@ namespace Adesto
 				fullAddress = (sectionNumber & bitMask) << config->dummyBitsLSB;
 			}
 
-			memcpy(memoryAddress, (uint8_t*)&fullAddress, addressFormat[device].numAddressBytes);
-			
-			return memoryAddress;
+			/*	Note: Cannot use memcpy because it reverses the byte order expected by the flash chip.
+			*	For example, if the value of 'fullAddress' were 0xAABBCC, the memcpy would put the values into the cmdBuffer as 0xCCBBAA.
+			*	This is correct as far as the MCU is concerned, but the flash chip needs the data exactly as calculated: 0xAABBCC
+			*/
+			cmdBuffer[1] = (fullAddress & 0xFF0000) >> 16;
+			cmdBuffer[2] = (fullAddress & 0x00FF00) >> 8;
+			cmdBuffer[3] = fullAddress & 0x0000FF;
 		}
 
 		uint32_t AT45::getSectionFromAddress(FlashSection section, uint32_t rawAddress)

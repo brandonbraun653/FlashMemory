@@ -117,20 +117,20 @@ namespace Adesto
 			 *	@note	By default selects blocking SPI mode. However, if using FreeRTOS, DMA SPI mode will be automatically selected
 			 *			and most function calls become non-blocking. 
 			 **/
-			Adesto::Status initialize(uint32_t clockFreq);
+			Adesto::Status initialize(uint32_t userClockFreq);
 
 			/** Reads data directly from a page in internal memory, bypassing both SRAM buffers without modification.
 			 *	@note If the end of the buffer is reached before all requested bytes have been clocked out,
 			 *	the data will then wrap around to the beginning of the buffer.
 			 *
 			 *	@param[in]	pageNumber		The page which from which to read (not an address)
-			 *	@param[in]	startAddress	The offset within that page to start reading from. Can be any value from 0 to page size
+			 *	@param[in]	pageOffset		The offset within that page to start reading from. Can be any value from 0 to page size
 			 *	@param[out]	dataOut			External array to hold the data
 			 *	@param[in]	len				Number of bytes to be read
 			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
 			 *	@return Always returns FLASH_OK
 			 **/
-			Adesto::Status directPageRead(uint32_t pageNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete = nullptr);
+			Adesto::Status directPageRead(uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataOut, size_t len, func_t onComplete = nullptr);
 
 			/** Reads data from one of the SRAM buffers independent of the main memory array.
 			 *	@note If the end of the buffer is reached before all requested bytes have been clocked out, 
@@ -200,8 +200,8 @@ namespace Adesto
 
 			/** Utilizes SRAM buffer 1 to write a fixed number of bytes to a pre-erased page of memory. Only the bytes written will be programmed.
 			 *	If the end of the buffer is reached before all bytes are written, the data will be wrapped around to the beginning of the buffer.
-			 *	@param[in]	bufferOffset	Selects the first byte in the SRAM buffer to be written
 			 *	@param[in]	pageNumber		Page number in memory to write
+			 *	@param[in]	pageOffset		Selects the first byte in the SRAM buffer to be written
 			 *	@param[in]	dataIn			Pointer to an external buffer of data to write (do not modify contents until write is complete)
 			 *	@param[in]	len				How many bytes to write, up to a full page size
 			 *	@param[in]	onComplete		Optional function pointer to execute upon task completion
@@ -210,7 +210,7 @@ namespace Adesto
 			 *	@note	Any data already in SRAM buffer 1 will be clobbered, BUT only the bytes altered in SRAM will be altered in memory. For example,
 			 *			if two bytes are written to SRAM, only two bytes will be written to memory.
 			 **/
-			Adesto::Status byteWrite(uint16_t bufferOffset, uint16_t pageNumber, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
+			Adesto::Status byteWrite(uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete = nullptr);
 
 			/** Writes a buffer of data to internal memory at some address 
 			 *	@param[in]	address			Starting address to begin write
@@ -302,10 +302,6 @@ namespace Adesto
 			 **/
 			bool isErasePgmError(StatusRegister* reg = nullptr);
 
-			bool isProgramComplete();
-			
-			bool isEraseComplete();
-
 			Adesto::Status useBinaryPageSize();
 
 			Adesto::Status useDataFlashPageSize();
@@ -342,6 +338,8 @@ namespace Adesto
 			#endif 
 			bool writeComplete = false;
 			bool readComplete = false;
+			uint32_t clockFrequency = 0;		/**< Contains actual frequency of the SPI clock in Hz */
+			float	 maxClockErr = 0.2f;		/**< Max percent error between requested clock and actual clock freq */
 
 			//Note: These values appear constant over all AT45 chips 
 			size_t pageSize = 264;				/**< Keeps track of the current page size configuration in bytes */
@@ -391,8 +389,8 @@ namespace Adesto
 			void eraseBlock(uint32_t blockNumber);
 			void erasePage(uint32_t pageNumber);
 
-
-			uint8_t* buildAddressCommand(FlashSection section, uint32_t indexingNumber);
+			void buildReadWriteCommand(uint16_t pageNumber, uint16_t offset = 0x0000);
+			void buildEraseCommand(FlashSection section, uint32_t sectionNumber);
 
 			/* Parses an address into a section category */
 			uint32_t getSectionFromAddress(FlashSection section, uint32_t rawAddress);

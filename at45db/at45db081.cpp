@@ -112,7 +112,7 @@ namespace Adesto
 			memset(cmdBuffer, 0, SIZE_OF_ARRAY(cmdBuffer));
 			
 
-			#if defined(USING_FREERTOS)
+			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			multiTXWakeup = xSemaphoreCreateBinary();
 			singleTXWakeup = xSemaphoreCreateBinary();
 			singleTXRXWakeup = xSemaphoreCreateBinary();
@@ -121,15 +121,16 @@ namespace Adesto
 
 		Adesto::Status AT45::initialize(uint32_t userClockFreq)
 		{
-			if (spi->begin(setup) != SPI_OK)
+			if (spi->init(setup) != SPI_OK)
 				return ERROR_SPI_INIT_FAILED;
 
-			#if defined(USING_FREERTOS)
+			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			spi->setMode(TXRX, DMA);
 			spi->attachThreadTrigger(BUFFERED_TXRX_COMPLETE, &multiTXWakeup);
 			spi->attachThreadTrigger(TX_COMPLETE, &singleTXWakeup);
 			spi->attachThreadTrigger(TXRX_COMPLETE, &singleTXRXWakeup);
-			#else			spi->setMode(TXRX, BLOCKING);
+			#else
+			spi->setPeripheralMode(TXRX, BLOCKING);
 			#endif
 
 			/*--------------------------------------
@@ -141,7 +142,7 @@ namespace Adesto
 			if (info.manufacturerID != JEDEC_CODE)
 				return ERROR_UNKNOWN_JEDEC_CODE;
 
-			spi->updateClockFrequency(userClockFreq);
+			spi->setClockFrequency(userClockFreq);
 			auto hiFreqInfo = getDeviceInfo();
 			
 			if (memcmp(&lowFreqInfo, &hiFreqInfo, sizeof(AT45xx_DeviceInfo)) != 0)
@@ -150,8 +151,7 @@ namespace Adesto
 			/*--------------------------------------
 			* Initialize various other settings
 			*-------------------------------------*/
-			/* Check what frequency we are actually getting */
-			clockFrequency = spi->getClockFrequency();	
+			spi->getClockFrequency(&clockFrequency);	
 
 			float clockErr = abs((float)clockFrequency - (float)userClockFreq) / (float)userClockFreq;
 			if (clockErr > maxClockErr)
@@ -483,7 +483,7 @@ namespace Adesto
 		bool AT45::isReadComplete()
 		{
 			//If not using freeRTOS, spi is in blocking mode. Any read will be complete before calling this function.
-			#if defined(USING_FREERTOS)
+			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			if ((xSemaphoreTake(singleTXRXWakeup, 0) == pdPASS) || readComplete)
 			{
 				readComplete = true;
@@ -499,7 +499,7 @@ namespace Adesto
 		bool AT45::isWriteComplete()
 		{
 			//If not using freeRTOS, spi is in blocking mode. Any write will be complete before calling this function.
-			#if defined(USING_FREERTOS)
+			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			if ((xSemaphoreTake(singleTXWakeup, 0) == pdPASS) || writeComplete)
 			{
 				writeComplete = true;
@@ -570,9 +570,9 @@ namespace Adesto
 		void AT45::SPI_write(uint8_t* data, size_t len, bool disableSS)
 		{
 			writeComplete = false;
-			spi->write(data, len, disableSS);
+			spi->writeBytes(data, len, disableSS);
 
-			#if defined(USING_FREERTOS)
+			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
 			while (!isWriteComplete());
 			#endif 
@@ -583,9 +583,9 @@ namespace Adesto
 			readComplete = false;
 
 			//Use cmdBuffer array as source of dummy bytes for the TX/RX operation.
-			spi->write(cmdBuffer + sizeof(cmdBuffer), data, len, disableSS);
+			spi->readBytes(data, len, disableSS);
 
-			#if defined(USING_FREERTOS)
+			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			while (!isReadComplete());
 			#endif 
 		}

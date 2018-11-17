@@ -104,10 +104,10 @@ namespace Adesto
 			spi = Chimera::make_unique<SPIClass>(spiChannel);
 
 			setup.clockFrequency = 1000000;
-			setup.bitOrder = MSB_FIRST;
-			setup.clockMode = MODE0;
-			setup.dataSize = DATASIZE_8BIT;
-			setup.mode = MASTER;
+            setup.bitOrder = BitOrder::MSB_FIRST;
+            setup.clockMode = ClockMode::MODE0;
+            setup.dataSize = DataSize::SZ_8BIT;
+            setup.mode = Mode::MASTER;
 
 			memset(cmdBuffer, 0, SIZE_OF_ARRAY(cmdBuffer));
 			
@@ -121,7 +121,7 @@ namespace Adesto
 
 		Adesto::Status AT45::initialize(uint32_t userClockFreq)
 		{
-			if (spi->init(setup) != SPI_OK)
+            if (spi->init(setup) != Chimera::SPI::Status::OK)
 				return ERROR_SPI_INIT_FAILED;
 
 			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
@@ -130,7 +130,7 @@ namespace Adesto
 			spi->attachThreadTrigger(TX_COMPLETE, &singleTXWakeup);
 			spi->attachThreadTrigger(TXRX_COMPLETE, &singleTXRXWakeup);
 			#else
-			spi->setPeripheralMode(TXRX, BLOCKING);
+            spi->setPeripheralMode(Chimera::SPI::SubPeripheral::TXRX, Chimera::SPI::SubPeripheralMode::BLOCKING);
 			#endif
 
 			/*--------------------------------------

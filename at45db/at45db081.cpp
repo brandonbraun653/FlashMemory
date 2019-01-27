@@ -1,3 +1,13 @@
+/********************************************************************************
+*   File Name:
+*       at45db081.cpp
+*       
+*   Description:
+*       Driver for the AT45DB NOR flash chip series from Adesto
+*   
+*   2019 | Brandon Braun | brandonbraun653@gmail.com
+********************************************************************************/
+
 /* C/C++ Includes */
 #include <memory>
 
@@ -5,27 +15,30 @@
 #include <Chimera/logging.hpp>
 #include <Chimera/utilities.hpp>
 
+/* Driver Includes */
 #include "at45db081.hpp"
 
 using namespace Chimera::SPI;
 using namespace Chimera::Logging;
 
 #define BYTE_LEN(x) (sizeof(x)/sizeof(uint8_t))
-#define STANDARD_PAGE_SIZE 264
-#define BINARY_PAGE_SIZE 256
+static constexpr uint16_t STANDARD_PAGE_SIZE = 264;
+static constexpr uint16_t BINARY_PAGE_SIZE = 256;
+static constexpr uint8_t ADDRESS_OVERRUN = (1u << 0);
+static constexpr uint8_t INVALID_SECTION_NUMBER	 = (1u << 1);
 
 struct FlashSizes
 {
-	size_t numSectors;
-	size_t numBlocks;
-	size_t numPages;
+	size_t numSectors = 0;
+	size_t numBlocks = 0;
+	size_t numPages = 0;
 };
 
 struct AddressDescriptions
 {
-	uint8_t dummyBitsMSB;
-	uint8_t addressBits;
-	uint8_t dummyBitsLSB;
+	uint8_t dummyBitsMSB = 0;
+	uint8_t addressBits = 0;
+	uint8_t dummyBitsLSB = 0;
 };
 
 struct AddressScheme
@@ -44,7 +57,9 @@ struct MemoryAddressFormat
 };
 
 
-/* Describes common delay times for most flash operations (in mS) */
+/**
+*   Describes common delay times for most flash operations (in mS) 
+*/
 struct FlashDelay
 {
 	uint8_t pageEraseAndProgramming;
@@ -54,11 +69,6 @@ struct FlashDelay
 	uint16_t sectorErase;
 	uint16_t chipErase;
 };
-
-
-/* Useful for determining any runtime errors */
-#define ADDRESS_OVERRUN			(1u << 0)
-#define INVALID_SECTION_NUMBER	(1u << 1)
 
 namespace Adesto
 {
@@ -96,12 +106,12 @@ namespace Adesto
 		};
 
 
-		AT45::AT45(FlashChip chip, const int& spiChannel)
+		AT45::AT45(const FlashChip chip, const int& spiChannel)
 		{
 			device = chip;
 			addressBytes = addressFormat[device].numAddressBytes;
 
-			spi = Chimera::make_unique<SPIClass>(spiChannel);
+			spi = std::make_unique<SPIClass>(spiChannel);
 
 			setup.clockFrequency = 1000000;
             setup.bitOrder = BitOrder::MSB_FIRST;
@@ -109,7 +119,7 @@ namespace Adesto
             setup.dataSize = DataSize::SZ_8BIT;
             setup.mode = Mode::MASTER;
 
-			memset(cmdBuffer, 0, SIZE_OF_ARRAY(cmdBuffer));
+    		cmdBuffer.fill(0);
 			
 
 			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
@@ -119,7 +129,7 @@ namespace Adesto
 			#endif
 		}
 
-		Adesto::Status AT45::initialize(uint32_t userClockFreq)
+		Adesto::Status AT45::initialize(const uint32_t userClockFreq)
 		{
             if (spi->init(setup) != Chimera::SPI::Status::OK)
 				return ERROR_SPI_INIT_FAILED;
@@ -163,30 +173,34 @@ namespace Adesto
 			return useBinaryPageSize();
 		}
 
-		Adesto::Status AT45::directPageRead(uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataOut, size_t len, func_t onComplete /*= nullptr*/)
+		Adesto::Status AT45::directPageRead(const uint16_t pageNumber, const uint16_t pageOffset, uint8_t *const dataOut, const size_t len, func_t onComplete /*= nullptr*/)
 		{
 			cmdBuffer[0] = MAIN_MEM_PAGE_READ;
 			buildReadWriteCommand(pageNumber, pageOffset);
 
-			/* The command is comprised of an opcode (1 byte), an address (3 bytes), and 4 dummy bytes.
-			 * The dummy bytes are used to initialize the read operation. */
-			SPI_write(cmdBuffer, 8, false);
+    		/*------------------------------------------------
+            The command is comprised of an opcode (1 byte), an address (3 bytes), and 4 dummy bytes.
+            The dummy bytes are used to initialize the read operation.
+            ------------------------------------------------*/
+			SPI_write(cmdBuffer.cbegin(), 8, false);
 			SPI_read(dataOut, len, true);
 
-			if (onComplete)
-				onComplete();
+    		if (onComplete)
+    		{
+        		onComplete();
+    		}
 
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::bufferRead(SRAMBuffer bufferNumber, uint16_t startAddress, uint8_t* dataOut, size_t len, func_t onComplete)
+		Adesto::Status AT45::bufferRead(const SRAMBuffer bufferNumber, const uint16_t startAddress, uint8_t *const dataOut, const size_t len, func_t onComplete /*= nullptr*/)
 		{
 			if(clockFrequency > 50000000)	//50 MHz
 				cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_READ_HF : BUFFER2_READ_HF;
 			else
 				cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_READ_LF : BUFFER2_READ_LF;
 
-			SPI_write(cmdBuffer, 5, false);
+			SPI_write(cmdBuffer.cbegin(), 5, false);
 			SPI_read(dataOut, len, true);
 
 			if (onComplete)
@@ -195,14 +209,14 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::bufferLoad(SRAMBuffer bufferNumber, uint16_t startAddress, uint8_t* dataIn, size_t len, func_t onComplete)
+		Adesto::Status AT45::bufferLoad(const SRAMBuffer bufferNumber, const uint16_t startAddress, const uint8_t *const dataIn, const size_t len, func_t onComplete /*= nullptr*/)
 		{
 			/* In this case, the page number input is ignored by the flash chip. Only the offset within the buffer is valid.
 			 * See datasheet section labeled 'Buffer Write' for more details. */
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_WRITE : BUFFER2_WRITE;
 			buildReadWriteCommand(0x0000, startAddress);
 			
-			SPI_write(cmdBuffer, 4, false);
+			SPI_write(cmdBuffer.cbegin(), 4, false);
 			SPI_write(dataIn, len, true);
 
 			if (onComplete)
@@ -211,7 +225,7 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::bufferWrite(SRAMBuffer bufferNumber, uint16_t pageNumber, bool erase, func_t onComplete)
+		Adesto::Status AT45::bufferWrite(const SRAMBuffer bufferNumber, const uint16_t pageNumber, const bool erase, func_t onComplete /*= nullptr*/)
 		{
 			if (erase)
 				cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_TO_MAIN_MEM_PAGE_PGM_W_ERASE : BUFFER2_TO_MAIN_MEM_PAGE_PGM_W_ERASE;
@@ -222,7 +236,7 @@ namespace Adesto
 			 * See datasheet section labeled 'Buffer to Main Memory Page Program with/without Built-In Erase' for more details. */
 			buildReadWriteCommand(pageNumber, 0x0000);
 
-			SPI_write(cmdBuffer, 4, true);
+			SPI_write(cmdBuffer.cbegin(), 4, true);
 
 			if (onComplete)
 				onComplete();
@@ -230,13 +244,13 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::pageWrite(SRAMBuffer bufferNumber, uint16_t bufferOffset, uint16_t pageNumber, uint8_t* dataIn, size_t len, func_t onComplete)
+		Adesto::Status AT45::pageWrite(const SRAMBuffer bufferNumber, const uint16_t bufferOffset, const uint16_t pageNumber, const uint8_t *const dataIn, const size_t len, func_t onComplete /*= nullptr*/)
 		{
 			/* Generate the full command sequence. See data sheet section labeled 'Main Memory Page Program through Buffer with Built-In Erase' */
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? MAIN_MEM_PAGE_PGM_THR_BUFFER1_W_ERASE : MAIN_MEM_PAGE_PGM_THR_BUFFER2_W_ERASE;
 			buildReadWriteCommand(pageNumber, bufferOffset);
 
-			SPI_write(cmdBuffer, 4, false);
+			SPI_write(cmdBuffer.cbegin(), 4, false);
 			SPI_write(dataIn, len, true);
 
 			if (onComplete)
@@ -245,7 +259,7 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::readModifyWriteManual(SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete)
+		Adesto::Status AT45::readModifyWriteManual(const SRAMBuffer bufferNumber, const uint16_t pageNumber, const uint16_t pageOffset, const uint8_t *const dataIn, const size_t len, func_t onComplete /*= nullptr*/)
 		{
 			Adesto::Status errorCode = FLASH_OK;
 
@@ -278,7 +292,7 @@ namespace Adesto
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? AUTO_PAGE_REWRITE1 : AUTO_PAGE_REWRITE2;
 			buildReadWriteCommand(pageNumber, pageOffset);
 
-			SPI_write(cmdBuffer, 4, false);
+			SPI_write(cmdBuffer.cbegin(), 4, false);
 			SPI_write(dataIn, len, true);
 
 			if (onComplete)
@@ -287,13 +301,13 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::byteWrite(uint16_t pageNumber, uint16_t pageOffset, uint8_t* dataIn, size_t len, func_t onComplete)
+		Adesto::Status AT45::byteWrite(const uint16_t pageNumber, const uint16_t pageOffset, const uint8_t *const dataIn, const size_t len, func_t onComplete /*= nullptr*/)
 		{
 			/* Generates the full command sequence. See datasheet section labeled 'Main Memory Byte/Page Program through Buffer 1 without Built-In Erase' */
 			cmdBuffer[0] = MAIN_MEM_BP_PGM_THR_BUFFER1_WO_ERASE;
 			buildReadWriteCommand(pageNumber, pageOffset);
 
-			SPI_write(cmdBuffer, 4, false);
+			SPI_write(cmdBuffer.cbegin(), 4, false);
 			SPI_write(dataIn, len, true);
 
 			if (onComplete)
@@ -302,7 +316,7 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		Adesto::Status AT45::write(uint32_t address, uint8_t* dataIn, size_t len, func_t onComplete)
+		Adesto::Status AT45::write(const uint32_t address, const uint8_t *const dataIn, const size_t len, func_t onComplete)
 		{
 			if (len)
 			{
@@ -399,7 +413,7 @@ namespace Adesto
 					break;
 				}
 
-				SPI_write(cmdBuffer, 4 + numDummyBytes, false);
+				SPI_write(cmdBuffer.cbegin(), 4 + numDummyBytes, false);
 				SPI_read(dataOut, len, true);
 
 				if (onComplete)
@@ -411,7 +425,7 @@ namespace Adesto
 				return ERROR_READ_LENGTH_INVALID;
 		}
 
-		Adesto::Status AT45::erase(uint32_t address, size_t len, func_t onComplete)
+		Adesto::Status AT45::erase(const uint32_t address, const size_t len, func_t onComplete /*= nullptr*/)
 		{
 			if (len)
 			{
@@ -428,9 +442,9 @@ namespace Adesto
 		Adesto::Status AT45::eraseChip()
 		{
 			uint32_t cmd = CHIP_ERASE;
-			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
+			memcpy(cmdBuffer.begin(), (uint8_t*)&cmd, sizeof(cmd));
 
-			SPI_write(cmdBuffer, BYTE_LEN(cmd), true);
+			SPI_write(cmdBuffer.cbegin(), sizeof(cmd), true);
 
 			return FLASH_OK;
 		}
@@ -441,13 +455,13 @@ namespace Adesto
 			return (reg & PAGE_SIZE_CONFIG_Pos) ? 256 : 264;
 		}
 
-		uint16_t AT45::readStatusRegister(StatusRegister* reg)
+		uint16_t AT45::readStatusRegister(StatusRegister *const reg /*= nullptr*/)
 		{
 			uint8_t val[2];
 
 			cmdBuffer[0] = STATUS_REGISTER_READ;
 
-			SPI_write(cmdBuffer, BYTE_LEN(STATUS_REGISTER_READ), false);
+			SPI_write(cmdBuffer.cbegin(), BYTE_LEN(STATUS_REGISTER_READ), false);
 			SPI_read(val, 2, true);
 
 			uint16_t tmp = (uint16_t)((val[0] << 8) | val[1]);
@@ -468,13 +482,13 @@ namespace Adesto
 			return tmp;
 		}
 
-		bool AT45::isDeviceReady(StatusRegister* reg)
+		bool AT45::isDeviceReady(StatusRegister *const reg /*= nullptr*/)
 		{
 			auto val = readStatusRegister(reg);
 			return (val & READY_BUSY_Pos);
 		}
 
-		bool AT45::isErasePgmError(StatusRegister* reg)
+		bool AT45::isErasePgmError(StatusRegister *const reg /*= nullptr*/)
 		{
 			auto val = readStatusRegister(reg);
 			return (val & ERASE_PGM_ERROR_Pos);
@@ -515,9 +529,9 @@ namespace Adesto
 		Adesto::Status AT45::useBinaryPageSize()
 		{
 			uint32_t cmd = CFG_PWR_2_PAGE_SIZE;
-			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
+			memcpy(cmdBuffer.begin(), (uint8_t*)&cmd, BYTE_LEN(cmd));
 
-			SPI_write(cmdBuffer, BYTE_LEN(cmd), true);
+			SPI_write(cmdBuffer.cbegin(), BYTE_LEN(cmd), true);
 
 			//Note: These values appear constant over all AT45 chips
 			pageSize = 256;
@@ -533,9 +547,9 @@ namespace Adesto
 		Adesto::Status AT45::useDataFlashPageSize()
 		{
 			uint32_t cmd = CFG_STD_FLASH_PAGE_SIZE;
-			memcpy(cmdBuffer, (uint8_t*)&cmd, BYTE_LEN(cmd));
+			memcpy(cmdBuffer.begin(), (uint8_t*)&cmd, BYTE_LEN(cmd));
 
-			SPI_write(cmdBuffer, BYTE_LEN(cmd), true);
+			SPI_write(cmdBuffer.cbegin(), BYTE_LEN(cmd), true);
 
 			//Note: These values appear constant over all AT45 chips
 			pageSize = 264;
@@ -550,13 +564,13 @@ namespace Adesto
 
 		AT45xx_DeviceInfo AT45::getDeviceInfo()
 		{
-			uint8_t data[3];
-			memset(data, 0, SIZE_OF_ARRAY(data));
-			memset(cmdBuffer, 0, SIZE_OF_ARRAY(cmdBuffer));
+    		std::array<uint8_t, 3> data;
+    		data.fill(0);
+    		cmdBuffer.fill(0);
 
 			cmdBuffer[0] = READ_DEVICE_INFO;
-			SPI_write(cmdBuffer, BYTE_LEN(READ_DEVICE_INFO), false);
-			SPI_read(data, 3, true);
+			SPI_write(cmdBuffer.cbegin(), BYTE_LEN(READ_DEVICE_INFO), false);
+			SPI_read(data.begin(), data.size(), true);
 
 			info.manufacturerID = data[0];
 			info.familyCode = static_cast<FamilyCode>((uint8_t)(data[1] >> 5) & 0xFF);
@@ -567,7 +581,7 @@ namespace Adesto
 			return info;
 		}
 
-		void AT45::SPI_write(uint8_t* data, size_t len, bool disableSS)
+		void AT45::SPI_write(const uint8_t *const data, const size_t len, const bool disableSS)
 		{
 			writeComplete = false;
 			spi->writeBytes(data, len, disableSS);
@@ -578,7 +592,7 @@ namespace Adesto
 			#endif 
 		}
 
-		void AT45::SPI_read(uint8_t* data, size_t len, bool disableSS)
+		void AT45::SPI_read(uint8_t *const data, const size_t len, const bool disableSS)
 		{
 			readComplete = false;
 
@@ -628,7 +642,7 @@ namespace Adesto
 			return range;
 		}
 
-		AT45::MemoryRange AT45::getWriteReadPages(uint32_t startAddress, size_t len)
+		AT45::MemoryRange AT45::getWriteReadPages(const uint32_t startAddress, const size_t len)
 		{
 			MemoryRange range;
 			uint32_t endAddress = startAddress + len - 1;
@@ -648,7 +662,7 @@ namespace Adesto
 			return range;
 		}
 
-		Adesto::Status AT45::eraseRanges(MemoryRange range, func_t onComplete)
+		Adesto::Status AT45::eraseRanges(const MemoryRange range, func_t onComplete /*= nullptr*/)
 		{
 			//SECTOR ERASE
 			for (int i = range.sector.start; i < range.sector.end + 1; i++)
@@ -699,46 +713,31 @@ namespace Adesto
 			return FLASH_OK;
 		}
 
-		void AT45::eraseSector(uint32_t sectorNumber)
+		void AT45::eraseSector(const uint32_t sectorNumber)
 		{
 			cmdBuffer[0] = SECTOR_ERASE;
 			buildEraseCommand(SECTOR, sectorNumber);
 
-			SPI_write(cmdBuffer, (BYTE_LEN(SECTOR_ERASE) + addressBytes), true);
+			SPI_write(cmdBuffer.cbegin(), (BYTE_LEN(SECTOR_ERASE) + addressBytes), true);
 		}
 
-		void AT45::eraseBlock(uint32_t blockNumber)
+		void AT45::eraseBlock(const uint32_t blockNumber)
 		{
 			cmdBuffer[0] = BLOCK_ERASE;
 			buildEraseCommand(BLOCK, blockNumber);
 
-			SPI_write(cmdBuffer, (BYTE_LEN(BLOCK_ERASE) + addressBytes), true);
+			SPI_write(cmdBuffer.cbegin(), (BYTE_LEN(BLOCK_ERASE) + addressBytes), true);
 		}
 
-		void AT45::erasePage(uint32_t pageNumber)
+		void AT45::erasePage(const uint32_t pageNumber)
 		{
 			cmdBuffer[0] = PAGE_ERASE;
 			buildEraseCommand(PAGE, pageNumber);
 
-			SPI_write(cmdBuffer, (BYTE_LEN(PAGE_ERASE) + addressBytes), true);
+			SPI_write(cmdBuffer.cbegin(), (BYTE_LEN(PAGE_ERASE) + addressBytes), true);
 		}
 
-
-		/** Generates the appropriate command sequence for several read and write operations, automatically
-		 *	writing to the class member 'cmdBuffer'.
-		 *	@param[in]	pageNumber	The desired page number in memory
-		 *	@param[in]	offset		The desired offset within the page
-		 *
-		 *	This command only works for several types of operations:
-		 *		. Direct Page Read (opcodes: 0xD2h)
-		 *		. Buffer Read (opcodes: 0xD1h, 0xD3h, 0xD4h, 0xD6h)
-		 *		. Buffer Write (opcodes: 0x84h, 0x87h)
-		 *		. Main Memory Page Program through Buffer with Built-In Erase (opcodes: 0x82h, 0x85h)
-		 *		. Main Memory Page Program through Buffer without Built-In Erase (opcodes: 0x88h, 0x89h)
-		 *		. Main Memory Byte/Page Program through Buffer 1 without Built-In Erase (opcodes: 0x02h)
-		 *		. Read-Modify-Write (opcodes: 0x58h, 0x59h)
-		 **/
-		void AT45::buildReadWriteCommand(uint16_t pageNumber, uint16_t offset)
+		void AT45::buildReadWriteCommand(const uint16_t pageNumber, const uint16_t offset /*= 0x0000*/)
 		{
 			/* Grab the correct page configuration. This informs the code how much bit shifting to apply */
 			const AddressDescriptions* config;
@@ -769,12 +768,7 @@ namespace Adesto
 			cmdBuffer[3] =  fullAddress & 0x0000FF;
 		}
 
-		/** Creates the command sequence needed to erase a particular flash section. Automatically overwrites the 
-		 *	class member 'cmdBuffer' with the appropriate data.
-		 *	@param[in]	section			What type of section to erase (page, block, etc)
-		 *	@param[in]	sectionNumber	Which index of that section type to erase (0, 1, 2, etc)
-		 **/
-		void AT45::buildEraseCommand(FlashSection section, uint32_t sectionNumber)
+		void AT45::buildEraseCommand(const FlashSection section, const uint32_t sectionNumber)
 		{
 			uint32_t fullAddress = 0u;
 			const AddressDescriptions* config;
@@ -844,7 +838,7 @@ namespace Adesto
 			cmdBuffer[3] = fullAddress & 0x0000FF;
 		}
 
-		uint32_t AT45::getSectionFromAddress(FlashSection section, uint32_t rawAddress)
+		uint32_t AT45::getSectionFromAddress(const FlashSection section, const uint32_t rawAddress)
 		{
 			uint32_t sectionNumber = 0;
 
@@ -875,7 +869,7 @@ namespace Adesto
 			return sectionNumber;
 		}
 
-		uint32_t AT45::getSectionStartAddress(FlashSection section, uint32_t sectionNumber)
+		uint32_t AT45::getSectionStartAddress(const FlashSection section, const uint32_t sectionNumber)
 		{
 			uint32_t address = 0u;
 

@@ -1,11 +1,11 @@
 /********************************************************************************
 *   File Name:
 *       at45db081.cpp
-*       
+*
 *   Description:
 *       Driver for the AT45DB NOR flash chip series from Adesto
-*   
-*   2019 | Brandon Braun | brandonbraun653@gmail.com
+*
+*   2018-2019 | Brandon Braun | brandonbraun653@gmail.com
 ********************************************************************************/
 
 /* C/C++ Includes */
@@ -20,6 +20,7 @@
 
 using namespace Chimera::SPI;
 using namespace Chimera::Logging;
+using namespace Chimera::Modules::Memory;
 
 #define BYTE_LEN(x) (sizeof(x)/sizeof(uint8_t))
 static constexpr uint16_t STANDARD_PAGE_SIZE = 264;
@@ -56,10 +57,6 @@ struct MemoryAddressFormat
 	const uint8_t numAddressBytes;
 };
 
-
-/**
-*   Describes common delay times for most flash operations (in mS) 
-*/
 struct FlashDelay
 {
 	uint8_t pageEraseAndProgramming;
@@ -73,9 +70,9 @@ struct FlashDelay
 namespace Adesto
 {
 	namespace NORFlash
-	{	
+	{
 		/* This MUST be kept in the same order as FlashChip enum */
-		static const FlashSizes chipSpecs[NUM_SUPPORTED_CHIPS] = 
+		static const FlashSizes chipSpecs[NUM_SUPPORTED_CHIPS] =
 		{
 			{ 16, 512, 4096 },	//AT45DB081E
 		};
@@ -92,12 +89,12 @@ namespace Adesto
 			},
 		};
 
-		static const FlashDelay chipDelay[NUM_SUPPORTED_CHIPS] = 
+		static const FlashDelay chipDelay[NUM_SUPPORTED_CHIPS] =
 		{
 			//AT45DB081E: See datasheet pg.49
 			{
-				15,		//Page erase and programming 
-				2,		//Page programming 
+				15,		//Page erase and programming
+				2,		//Page programming
 				12,		//Page erase
 				30,		//Block erase
 				700,	//Sector erase
@@ -120,7 +117,7 @@ namespace Adesto
             setup.mode = Mode::MASTER;
 
     		cmdBuffer.fill(0);
-			
+
 
 			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			multiTXWakeup = xSemaphoreCreateBinary();
@@ -146,7 +143,7 @@ namespace Adesto
 			/*--------------------------------------
 			 * Check for a proper device connection:
 			 *	1) Get the manufacturer id at low freq (~1MHz for stability)
-			 *	2) Retry again at the user requested frequency 
+			 *	2) Retry again at the user requested frequency
 			 *-------------------------------------*/
 			auto lowFreqInfo = getDeviceInfo();
 			if (info.manufacturerID != JEDEC_CODE)
@@ -154,19 +151,19 @@ namespace Adesto
 
 			spi->setClockFrequency(userClockFreq);
 			auto hiFreqInfo = getDeviceInfo();
-			
+
 			if (memcmp(&lowFreqInfo, &hiFreqInfo, sizeof(AT45xx_DeviceInfo)) != 0)
 				return ERROR_FAILED_HIGH_FREQUENCY_TRANSACTION;
 
 			/*--------------------------------------
 			* Initialize various other settings
 			*-------------------------------------*/
-			spi->getClockFrequency(&clockFrequency);	
+			spi->getClockFrequency(&clockFrequency);
 
 			float clockErr = abs((float)clockFrequency - (float)userClockFreq) / (float)userClockFreq;
 			if (clockErr > maxClockErr)
 			{
-				Console.log(Level::WARN, "Flash chip SPI clock freq not met. Tried: %.5f MHz, Got: %.5f MHz\r\n", 
+				Console.log(Level::WARN, "Flash chip SPI clock freq not met. Tried: %.5f MHz, Got: %.5f MHz\r\n",
 					((float)userClockFreq / 1000000.0f), ((float)clockFrequency / 1000000.0f));
 			}
 
@@ -215,7 +212,7 @@ namespace Adesto
 			 * See datasheet section labeled 'Buffer Write' for more details. */
 			cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_WRITE : BUFFER2_WRITE;
 			buildReadWriteCommand(0x0000, startAddress);
-			
+
 			SPI_write(cmdBuffer.cbegin(), 4, false);
 			SPI_write(dataIn, len, true);
 
@@ -232,7 +229,7 @@ namespace Adesto
 			else
 				cmdBuffer[0] = (bufferNumber == BUFFER1) ? BUFFER1_TO_MAIN_MEM_PAGE_PGM_WO_ERASE : BUFFER2_TO_MAIN_MEM_PAGE_PGM_WO_ERASE;
 
-			/* This command is opposite of 'bufferLoad()'. Only the page number is valid and then offset is ignored. 
+			/* This command is opposite of 'bufferLoad()'. Only the page number is valid and then offset is ignored.
 			 * See datasheet section labeled 'Buffer to Main Memory Page Program with/without Built-In Erase' for more details. */
 			buildReadWriteCommand(pageNumber, 0x0000);
 
@@ -371,7 +368,7 @@ namespace Adesto
 					if (isErasePgmError())
 						return ERROR_WRITE_FAILURE;
 				}
-				
+
 				return FLASH_OK;
 			}
 			else
@@ -388,7 +385,7 @@ namespace Adesto
 				uint16_t pageOffset = range.page.startPageOffset;
 
 				buildReadWriteCommand(pageNumber, pageOffset);
-			
+
 				/* The command is comprised of an opcode (1 byte), an address (3 bytes), and X dummy bytes.
 				 * The dummy bytes are used to initialize the read operation for higher frequencies */
 				size_t numDummyBytes = 0;
@@ -408,8 +405,8 @@ namespace Adesto
 					numDummyBytes = 2;
 					break;
 
-				default: 
-					numDummyBytes = 0; 
+				default:
+					numDummyBytes = 0;
 					break;
 				}
 
@@ -589,7 +586,7 @@ namespace Adesto
 			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			/* Block so we don't trigger on multi TX. In reality this is a very small amount of time */
 			while (!isWriteComplete());
-			#endif 
+			#endif
 		}
 
 		void AT45::SPI_read(uint8_t *const data, const size_t len, const bool disableSS)
@@ -601,7 +598,7 @@ namespace Adesto
 
 			#if defined(REPLACE_ME_WITH_CHIMERA_FREERTOS)
 			while (!isReadComplete());
-			#endif 
+			#endif
 		}
 
 		AT45::MemoryRange AT45::getErasableSections(uint32_t address, size_t len)
@@ -671,7 +668,7 @@ namespace Adesto
 
 				while (!isDeviceReady())
 				{
-					//Delay the average time for a sector erase as specified by the datasheet 
+					//Delay the average time for a sector erase as specified by the datasheet
 					Chimera::delayMilliseconds(chipDelay[device].sectorErase);
 				}
 
@@ -750,7 +747,7 @@ namespace Adesto
 			uint32_t addressBitMask = (1u << config->addressBits) - 1u;
 			uint32_t offsetBitMask  = (1u << config->dummyBitsLSB) - 1u;
 
-			/*	The full address is really only 3 bytes wide. They are set up as follows, with 'a' == address bit, 
+			/*	The full address is really only 3 bytes wide. They are set up as follows, with 'a' == address bit,
 			 *	'o' == offset bit and 'x' == don't care. This is the exact order in which it must be transmitted. (ie MSB first)
 			 *								 Byte 1 | Byte 2 | Byte 3
 			 *		For 264 byte page size: xxxaaaaa|aaaaaaao|oooooooo
@@ -920,5 +917,34 @@ namespace Adesto
 				break;
 			}
 		}
-	}
-}
+
+
+    	BlockStatus AT45::DiskOpen(const uint8_t volNum, BlockMode openMode)
+    	{
+            return BlockStatus::BLOCK_DEV_ENOSYS;
+    	}
+
+    	BlockStatus AT45::DiskClose(const uint8_t volNum)
+    	{
+            return BlockStatus::BLOCK_DEV_ENOSYS;
+    	}
+
+    	BlockStatus AT45::DiskRead(const uint8_t volNum, const uint64_t sectorStart, const uint32_t sectorCount, void *const readBuffer)
+    	{
+            return BlockStatus::BLOCK_DEV_ENOSYS;
+    	}
+
+    	BlockStatus AT45::DiskWrite(const uint8_t volNum, const uint64_t sectorStart, const uint32_t sectorCount, const void *const writeBuffer)
+    	{
+            return BlockStatus::BLOCK_DEV_ENOSYS;
+    	}
+
+    	BlockStatus AT45::DiskFlush(const uint8_t volNum)
+    	{
+        	return BlockStatus::BLOCK_DEV_ENOSYS;
+    	}
+
+
+	}   /* Namespace: NORFlash */
+}   /* Namespace: Adesto */
+

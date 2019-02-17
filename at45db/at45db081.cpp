@@ -163,7 +163,7 @@ namespace Adesto
 			float clockErr = abs((float)clockFrequency - (float)userClockFreq) / (float)userClockFreq;
 			if (clockErr > maxClockErr)
 			{
-				Console.log(Level::WARN, "Flash chip SPI clock freq not met. Tried: %.5f MHz, Got: %.5f MHz\r\n",
+				Console.log(Level::LVL_WARN, "Flash chip SPI clock freq not met. Tried: %.5f MHz, Got: %.5f MHz\r\n",
 					((float)userClockFreq / 1000000.0f), ((float)clockFrequency / 1000000.0f));
 			}
 

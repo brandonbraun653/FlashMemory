@@ -195,9 +195,22 @@ TEST( AT45Initialize, InitializationSuccess )
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
+#include "bus_pirate.hpp"
 
 TEST( AT45InitializeHW, initSuccess )
 {
+  using namespace Chimera::SPI;
+
+  std::string device = "COM7";
+  HWInterface::BusPirate::Device bp(device);
+
+  SPIClass_sPtr spi = std::make_shared<SPIClass>(bp);
+  Adesto::NORFlash::AT45 flash( spi );
+
+  Adesto::FlashChip chip = Adesto::FlashChip::AT45DB081E;
+  auto result = flash.initialize(chip);
+
+  EXPECT_EQ( Adesto::Status::FLASH_OK, result );
 }
 
 #endif /* HW_TEST */

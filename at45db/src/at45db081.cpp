@@ -119,7 +119,7 @@ namespace Adesto
         return ERROR_SPI_INIT_FAILED;
       }
       spi->setPeripheralMode( Chimera::SPI::SubPeripheral::TXRX, Chimera::SPI::SubPeripheralMode::BLOCKING );
-
+      spi->setChipSelectControlMode( Chimera::SPI::ChipSelectMode::MANUAL );
 
       /*------------------------------------------------
       Check for a proper device connection:
@@ -549,13 +549,25 @@ namespace Adesto
     void AT45::SPI_write( const uint8_t *const data, const uint32_t len, const bool disableSS )
     {
       writeComplete = false;
+      spi->setChipSelect(Chimera::GPIO::State::LOW);
       spi->writeBytes( data, len, 10 );
+
+      if( disableSS )
+      {
+        spi->setChipSelect(Chimera::GPIO::State::HIGH);
+      }
     }
 
     void AT45::SPI_read( uint8_t *const data, const uint32_t len, const bool disableSS )
     {
       readComplete = false;
+      spi->setChipSelect( Chimera::GPIO::State::LOW );
       spi->readBytes( data, len, 10 );
+
+      if ( disableSS )
+      {
+        spi->setChipSelect( Chimera::GPIO::State::HIGH );
+      }
     }
 
     AT45::MemoryRange AT45::getErasableSections( uint32_t address, uint32_t len )

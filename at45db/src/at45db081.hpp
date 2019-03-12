@@ -19,6 +19,7 @@
 #include <Chimera/spi.hpp>
 #include <Chimera/threading.hpp>
 #include <Chimera/modules/memory/blockDevice.hpp>
+#include <Chimera/modules/memory/flash.hpp>
 
 /* Driver Includes */
 #include "at45db081_definitions.hpp"
@@ -105,11 +106,12 @@ namespace Adesto
      *that is intended to provide commonly used peripheral functions for a variety of microcontrollers.
      *
      *	Care must be taken when passing in the pointers for reading/writing data. Due to using the Chimera HAL, it is not
-     *guaranteed that a copy of the buffer data will be made, as that choice is left up to the device driver backend. For
+     *guaranteed that a copy of the buffer data will be made, as that choice is left up to the device driver back end. For
      *safety, it is good practice to keep the pointers in scope and not modify its data until the read/write/program operations
      *are complete.
      */
-    class AT45 : public Chimera::Modules::Memory::BlockDevice
+    class AT45 : public Chimera::Modules::Memory::BlockDevice,
+                 public Chimera::Modules::Memory::GenericFlashInterface
     {
     public:
       AT45()  = default;
@@ -370,17 +372,38 @@ namespace Adesto
        */
       uint32_t getFlashSize();
 
-
+      /*------------------------------------------------
+      Block Device Interface Functions
+      ------------------------------------------------*/
       Chimera::Modules::Memory::BlockStatus DiskOpen( const uint8_t volNum,
-                                                      Chimera::Modules::Memory::BlockMode openMode ) override;
-      Chimera::Modules::Memory::BlockStatus DiskClose( const uint8_t volNum ) override;
-      Chimera::Modules::Memory::BlockStatus DiskRead( const uint8_t volNum, const uint64_t sectorStart,
-                                                      const uint32_t sectorCount, void *const readBuffer ) override;
-      Chimera::Modules::Memory::BlockStatus DiskWrite( const uint8_t volNum, const uint64_t sectorStart,
-                                                       const uint32_t sectorCount, const void *const writeBuffer ) override;
-      Chimera::Modules::Memory::BlockStatus DiskFlush( const uint8_t volNum ) override;
+                                                      Chimera::Modules::Memory::BlockMode openMode ) final override;
 
-    private:
+      Chimera::Modules::Memory::BlockStatus DiskClose( const uint8_t volNum ) final override;
+
+      Chimera::Modules::Memory::BlockStatus DiskRead( const uint8_t volNum, const uint64_t sectorStart,
+                                                      const uint32_t sectorCount, void *const readBuffer ) final override;
+
+      Chimera::Modules::Memory::BlockStatus DiskWrite( const uint8_t volNum, const uint64_t sectorStart,
+                                                       const uint32_t sectorCount, const void *const writeBuffer ) final override;
+
+      Chimera::Modules::Memory::BlockStatus DiskFlush( const uint8_t volNum ) final override;
+
+      /*------------------------------------------------
+      Generic Flash Interface Functions
+      ------------------------------------------------*/
+      Chimera::Status_t write( const uint32_t address, const uint8_t *const data, const uint32_t length ) final override;
+      
+      Chimera::Status_t read( const uint32_t address, uint8_t *const data, const uint32_t length ) final override;
+      
+      Chimera::Status_t erase( const uint32_t begin, const uint32_t end ) final override;
+      
+      Chimera::Status_t writeCompleteCallback( const Chimera::void_func_uint32_t func ) final override;
+      
+      Chimera::Status_t readCompleteCallback( const Chimera::void_func_uint32_t func ) final override;
+      
+      Chimera::Status_t eraseCompleteCallback( const Chimera::void_func_uint32_t func ) final override;
+
+private:
 
       #if defined( GMOCK_TEST )
       Chimera::Mock::SPIMock *spi;

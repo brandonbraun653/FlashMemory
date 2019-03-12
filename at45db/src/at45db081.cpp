@@ -362,6 +362,8 @@ namespace Adesto
         return ERROR_WRITE_LENGTH_INVALID;
     }
 
+
+
     Adesto::Status AT45::read( uint32_t address, uint8_t *dataOut, uint32_t len, func_t onComplete )
     {
       if ( len )
@@ -899,7 +901,6 @@ namespace Adesto
       }
     }
 
-
     BlockStatus AT45::DiskOpen( const uint8_t volNum, BlockMode openMode )
     {
       return BlockStatus::BLOCK_DEV_ENOSYS;
@@ -927,6 +928,35 @@ namespace Adesto
       return BlockStatus::BLOCK_DEV_ENOSYS;
     }
 
+    Chimera::Status_t AT45::write( const uint32_t address, const uint8_t *const data, const uint32_t length )
+    {
+      return Chimera::CommonStatusCodes::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t AT45::read( const uint32_t address, uint8_t *const data, const uint32_t length )
+    {
+      return Chimera::CommonStatusCodes::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t AT45::erase( const uint32_t begin, const uint32_t end )
+    {
+      return Chimera::CommonStatusCodes::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t AT45::writeCompleteCallback( const Chimera::void_func_uint32_t func )
+    {
+      return Chimera::CommonStatusCodes::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t AT45::readCompleteCallback( const Chimera::void_func_uint32_t func )
+    {
+      return Chimera::CommonStatusCodes::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t AT45::eraseCompleteCallback( const Chimera::void_func_uint32_t func )
+    {
+      return Chimera::CommonStatusCodes::NOT_SUPPORTED;
+    }
 
   }  // namespace NORFlash
 }  // namespace Adesto

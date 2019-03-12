@@ -39,25 +39,7 @@ namespace Adesto
     NUM_SUPPORTED_CHIPS
   };
 
-  enum Status
-  {
-    FLASH_OK,
-    ERROR_SPI_INIT_FAILED,
-    ERROR_UNKNOWN_JEDEC_CODE,
-    ERROR_FAILED_HIGH_FREQUENCY_TRANSACTION,
-    ERROR_PAGE_SIZE_MISMATCH,
-    ERROR_LENGTH_NOT_PAGE_ALIGNED,
-    ERROR_ADDRESS_NOT_PAGE_ALIGNED,
-    ERROR_ERASE_FAILURE,
-    ERROR_ERASE_LENGTH_INVALID,
-    ERROR_WRITE_LENGTH_INVALID,
-    ERROR_READ_LENGTH_INVALID,
-    ERROR_WRITE_FAILURE,
-    ERROR_DEVICE_NOT_READY,
-
-  };
-
-  enum SRAMBuffer
+  enum class SRAMBuffer : uint8_t
   {
     BUFFER1,
     BUFFER2
@@ -69,8 +51,6 @@ namespace Adesto
     uint32_t end;
     bool rangeValid = false;
   };
-
-  typedef void ( *func_t )( void );
 
   namespace NORFlash
   {
@@ -100,18 +80,21 @@ namespace Adesto
       bool eraseSuspend           = false;
     };
 
+    class AT45;
+    typedef std::shared_ptr<AT45> AT45_sPtr;
+    typedef std::unique_ptr<AT45> AT45_uPtr;
+
     /**
-     *   Provides a user friendly interface for Adesto flash memory chips of the AT45 family. The class supports asynchronous
-     *operation through FreeRTOS using DMA mode SPI. The SPI driver comes from the Chimera library, which is a high level HAL
-     *that is intended to provide commonly used peripheral functions for a variety of microcontrollers.
+     *  Provides a user friendly interface for Adesto flash memory chips of the AT45 family. The class supports asynchronous
+     *  operation through FreeRTOS using DMA mode SPI. The SPI driver comes from the Chimera library, which is a high level HAL
+     *  that is intended to provide commonly used peripheral functions for a variety of microcontrollers.
      *
      *	Care must be taken when passing in the pointers for reading/writing data. Due to using the Chimera HAL, it is not
-     *guaranteed that a copy of the buffer data will be made, as that choice is left up to the device driver back end. For
-     *safety, it is good practice to keep the pointers in scope and not modify its data until the read/write/program operations
-     *are complete.
+     *  guaranteed that a copy of the buffer data will be made, as that choice is left up to the device driver back end. For
+     *  safety, it is good practice to keep the pointers in scope and not modify its data until the read/write/program
+     *operations are complete.
      */
-    class AT45 : public Chimera::Modules::Memory::BlockDevice,
-                 public Chimera::Modules::Memory::GenericFlashInterface
+    class AT45 : public Chimera::Modules::Memory::BlockDevice, public Chimera::Modules::Memory::GenericFlashInterface
     {
     public:
       AT45()  = default;
@@ -123,15 +106,59 @@ namespace Adesto
       }
 
       /**
-       *  Start up the SPI driver and verify that a valid chip is connected
+       *  Initialize the connection to the flash memory chip
        *
-       *	@note	By default selects blocking SPI mode. However, if using FreeRTOS, DMA SPI mode will
-       *           be automatically selected and most function calls become non-blocking.
-       *
-       *	@param[in]	clockFreq		  The desired SPI clock frequency in Hz
-       *  @return FLASH_OK if everything is fine, an error code of Adesto::Status if not.
+       *	@param[in]  chip          The particular AT45xxx variant chip to connect to
+       *  @return Chimera::Status_t
        */
-      Adesto::Status initialize( const FlashChip chip );
+      Chimera::Status_t init( const FlashChip chip );
+
+      /**
+       *  Writes data to one of the SRAM buffers, but does not write it to memory.
+       *
+       *	@note   If the end of the SRAM buffer is reached before all bytes have been clocked in, the data will then
+       *          wrap around to the beginning of the SRAM buffer.
+       *
+       *	@param[in]	bufferNumber	Selects which SRAM buffer to write to
+       *	@param[in]	startAddress	Starting write address. Can be any value from 0 to the current page size
+       *	@param[out] dataIn			  External array to transmit in (do not modify contents until write is complete)
+       *	@param[in]	len				    Number of bytes to write
+       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+       *	@return Chimera::Status_t
+       **/
+      Chimera::Status_t bufferLoad( const SRAMBuffer bufferNumber, const uint16_t startAddress, const uint8_t *const dataIn,
+                                    const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
+
+      /**
+       *  Writes a full page of data stored in an SRAM buffer to memory
+       *
+       *	@note	If setting erase = false, the page must be erased by some other means before
+       *           programming, otherwise an error will occur.
+       *
+       *	@param[in]	bufferNumber	Selects which SRAM buffer to write to memory
+       *	@param[in]	pageNumber		Page number in memory which will be written
+       *	@param[in]	erase			    Selects whether or not to automatically erase the page before writing
+       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t bufferWrite( const SRAMBuffer bufferNumber, const uint16_t pageNumber, const bool erase,
+                                     Chimera::void_func_uint32_t onComplete = nullptr );
+
+      /**
+       *  Reads data from one of the internal SRAM buffers (not actual memory)
+       *
+       *	@note   If the end of the SRAM buffer is reached before all requested bytes have been clocked out,
+       *	        the data will then wrap around to the beginning of the SRAM buffer.
+       *
+       *	@param[in]	bufferNumber	Selects which SRAM buffer to read from
+       *	@param[in]	offset	      Starting address to read from. Can be any value from 0 to the page size
+       *	@param[out] dataOut			  External array to hold the data
+       *	@param[in]	len				    Number of bytes to be read
+       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t bufferRead( const SRAMBuffer bufferNumber, const uint16_t offset, uint8_t *const dataOut,
+                                    const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**
        *  Reads data directly from a page in internal memory, bypassing both SRAM buffers without modification.
@@ -144,94 +171,10 @@ namespace Adesto
        *	@param[out]	dataOut			  External array to hold the data
        *	@param[in]	len				    Number of bytes to be read
        *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return Always returns FLASH_OK
+       *	@return Chimera::Status_t
        */
-      Adesto::Status directPageRead( const uint16_t pageNumber, const uint16_t pageOffset, uint8_t *const dataOut,
-                                     const uint32_t len, func_t onComplete = nullptr );
-
-      /**
-       *  Reads data from one of the SRAM buffers independent of the main memory array.
-       *
-       *	@note   If the end of the buffer is reached before all requested bytes have been clocked out,
-       *	        the data will then wrap around to the beginning of the buffer.
-       *
-       *	@param[in]	bufferNumber	Selects which SRAM buffer to read from
-       *	@param[in]	startAddress	Starting address to read from. Can be any value from 0 to the current page size
-       *	@param[out] dataOut			External array to hold the data
-       *	@param[in]	len				Number of bytes to be read
-       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return Always returns FLASH_OK
-       */
-      Adesto::Status bufferRead( const SRAMBuffer bufferNumber, const uint16_t startAddress, uint8_t *const dataOut,
-                                 const uint32_t len, func_t onComplete = nullptr );
-
-      /**
-       *  Writes data to one of the SRAM buffers independent of the main memory array.
-       *
-       *	@note   If the end of the buffer is reached before all bytes have been clocked in, the data will then
-       *          wrap around to the beginning of the buffer.
-       *
-       *	@param[in]	bufferNumber	Selects which SRAM buffer to write to
-       *	@param[in]	startAddress	Starting write address. Can be any value from 0 to the current page size
-       *	@param[out] dataIn			  External array to transmit in (do not modify contents until write is complete)
-       *	@param[in]	len				    Number of bytes to write
-       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return FLASH_OK if everything is fine, otherwise ERROR_WRITE_FAILURE
-       **/
-      Adesto::Status bufferLoad( const SRAMBuffer bufferNumber, const uint16_t startAddress, const uint8_t *const dataIn,
-                                 const uint32_t len, func_t onComplete = nullptr );
-
-      /**
-       *  Writes a full page of data stored in an SRAM buffer to memory
-       *
-       *	@note	If setting erase = false, the page must be erased by some other means before
-       *           programming, otherwise an error will occur.
-       *
-       *	@param[in]	bufferNumber	Selects which SRAM buffer to write to memory
-       *	@param[in]	pageNumber		Page number in memory which will be written
-       *	@param[in]	erase			    Selects whether or not to automatically erase the page before writing
-       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return FLASH_OK
-       */
-      Adesto::Status bufferWrite( const SRAMBuffer bufferNumber, const uint16_t pageNumber, const bool erase,
-                                  func_t onComplete = nullptr );
-
-      /**
-       *  Combines the operations of bufferLoad/Write. Data is written to an SRAM buffer and the chip
-       *  automatically erases and programs a given page address with the contents of the SRAM buffer.
-       *
-       *	@note	  If only a partial page is written to the SRAM buffer, whatever data is left in SRAM will
-       *          overwrite the full page in memory
-       *
-       *	@param[in]	bufferNumber	Selects which SRAM buffer to use
-       *	@param[in]	bufferOffset	Selects the first byte in the SRAM buffer to be written
-       *	@param[in]	pageNumber		Page number in memory to write
-       *	@param[in]	dataIn			  Pointer to external buffer of data to write (do not modify contents until write is complete)
-       *	@param[in]	len				    How many bytes should be written, up to a full page size
-       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return FLASH_OK
-       */
-      Adesto::Status pageWrite( const SRAMBuffer bufferNumber, const uint16_t bufferOffset, const uint16_t pageNumber,
-                                const uint8_t *const dataIn, const uint32_t len, func_t onComplete = nullptr );
-
-      /**
-       *  A completely self-contained operation to reprogram any number of sequential bytes within a
-       *  page, without modifying the rest
-       *
-       *	@param[in]	bufferNumber	Selects which SRAM buffer to use
-       *	@param[in]	pageNumber		Page number in memory to write
-       *	@param[in]	pageOffset		Selects the first byte in the page to be written
-       *	@param[in]	dataIn			  Pointer to external buffer of data to write (do not modify contents until write is complete)
-       *	@param[in]	len				    How many bytes should be written, up to a full page size
-       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return FLASH_OK
-       */
-      Adesto::Status readModifyWriteManual( const SRAMBuffer bufferNumber, const uint16_t pageNumber, const uint16_t pageOffset,
-                                            const uint8_t *const dataIn, const uint32_t len, func_t onComplete = nullptr );
-
-
-      Adesto::Status readModifyWrite( SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t *dataIn,
-                                      uint32_t len, func_t onComplete = nullptr );
+      Chimera::Status_t directPageRead( const uint16_t pageNumber, const uint16_t pageOffset, uint8_t *const dataOut,
+                                        const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**
        *  Utilizes SRAM buffer 1 to write a fixed number of bytes to a pre-erased page of memory. Only the
@@ -244,61 +187,61 @@ namespace Adesto
        *
        *	@param[in]	pageNumber		Page number in memory to write
        *	@param[in]	pageOffset		Selects the first byte in the SRAM buffer to be written
-       *	@param[in]	dataIn			  Pointer to an external buffer of data to write (do not modify contents until write is complete)
+       *	@param[in]	dataIn			  Pointer to an external buffer of data to write
        *	@param[in]	len				    How many bytes to write, up to a full page size
        *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return FLASH_OK
+       *	@return Chimera::Status_t
        */
-      Adesto::Status byteWrite( const uint16_t pageNumber, const uint16_t pageOffset, const uint8_t *const dataIn,
-                                const uint32_t len, func_t onComplete = nullptr );
+      Chimera::Status_t byteWrite( const uint16_t pageNumber, const uint16_t pageOffset, const uint8_t *const dataIn,
+                                   const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**
-       *   Writes a buffer of data to internal memory at some address
+       *  Combines the operations of bufferLoad/Write. Data is written to an SRAM buffer and the chip
+       *  automatically erases and programs a given page address with the contents of the SRAM buffer.
        *
-       *	@param[in]	address			  Starting address to begin write
-       *	@param[in]	dataIn			  Buffer of data (do not modify contents until write is complete)
-       *	@param[in]	len				    Number of bytes to write
+       *	@note	  If only a partial page is written to the SRAM buffer, whatever data is left in SRAM will
+       *          overwrite the full page in memory
+       *
+       *	@param[in]	bufferNumber	Selects which SRAM buffer to use
+       *	@param[in]	bufferOffset	Selects the first byte in the SRAM buffer to be written
+       *	@param[in]	pageNumber		Page number in memory to write
+       *	@param[in]	dataIn			  Pointer to external buffer of data to write
+       *	@param[in]	len				    How many bytes should be written, up to a full page size
        *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return FLASH_OK
+       *	@return Chimera::Status_t
        */
-      Adesto::Status write( const uint32_t address, const uint8_t *const dataIn, const uint32_t len,
-                            func_t onComplete = nullptr );
+      Chimera::Status_t pageWrite( const SRAMBuffer bufferNumber, const uint16_t bufferOffset, const uint16_t pageNumber,
+                                   const uint8_t *const dataIn, const uint32_t len,
+                                   Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**
-       *  Reads data directly from a starting address in internal memory, bypassing both SRAM buffers without modification.
-       *	Will continue reading from memory until the chip select line is deactivated.
+       *  A completely self-contained operation to reprogram any number of sequential bytes within a
+       *  page, without modifying the rest.
        *
-       *	@param[in]	address			  The starting address which from which to read
-       *	@param[out]	dataOut			  External array to hold the data
-       *	@param[in]	len				    Number of bytes to be read
+       *	@param[in]	bufferNumber	Selects which SRAM buffer to use
+       *	@param[in]	pageNumber		Page number in memory to write
+       *	@param[in]	pageOffset		Selects the first byte in the page to be written
+       *	@param[in]	dataIn			  Pointer to external buffer of data to write
+       *	@param[in]	len				    How many bytes should be written, up to a full page size
        *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return Always returns FLASH_OK
+       *	@return Chimera::Status_t
        */
-      Adesto::Status read( const uint32_t address, uint8_t *const dataOut, const uint32_t len, func_t onComplete = nullptr );
+      Chimera::Status_t readModifyWriteManual( const SRAMBuffer bufferNumber, const uint16_t pageNumber,
+                                               const uint16_t pageOffset, const uint8_t *const dataIn, const uint32_t len,
+                                               Chimera::void_func_uint32_t onComplete = nullptr );
 
-      /**
-       *  Erase sections of the chip in multiples of the page size (default 256 bytes)
-       *
-       *	@note	  Due to the segmented nature of this operation, it will not return until the memory
-       *          has been erased. When using FreeRTOS, this only blocks the current thread.
-       *
-       *	@todo	  Try and create an OO version of the FreeRTOS tasks such that a class member thread
-       *          could be spawned to handle this stuff without blocking
-       *
-       *	@param[in]	address			  Location to start the erasing. Must be page aligned.
-       *	@param[in]	len				    Number of bytes to be erased. Must be page aligned.
-       *  @param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return FLASH_OK if everything is fine, an error code of Adesto::Status if not.
-       */
-      Adesto::Status erase( const uint32_t address, const uint32_t len, func_t onComplete = nullptr );
+
+      Chimera::Status_t readModifyWrite( SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t *dataIn,
+                                         uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
+
 
       /**
        *  Starts the full chip erase process and then returns. Completion must be checked
        *  with AT45::isEraseComplete()
        *
-       *	@return FLASH_OK
+       *	@return Chimera::Status_t
        */
-      Adesto::Status eraseChip();
+      Chimera::Status_t eraseChip();
 
       /**
        *  Queries the flash chip status register and determines the page size configuration setting
@@ -334,15 +277,15 @@ namespace Adesto
 
       /**
        *   Instruct the flash chip to use a binary (power of 2) page sizing
-       *   @return FLASH_OK
+       *   @return Chimera::Status_t
        */
-      Adesto::Status useBinaryPageSize();
+      Chimera::Status_t useBinaryPageSize();
 
       /**
        *   Instruct the flash chip to use the alternate page sizing
-       *   @return FLASH_OK
+       *   @return Chimera::Status_t
        */
-      Adesto::Status useDataFlashPageSize();
+      Chimera::Status_t useDataFlashPageSize();
 
       /**
        *   Reads the device manufacturer ID and device ID. Also updates internal copy.
@@ -384,38 +327,41 @@ namespace Adesto
                                                       const uint32_t sectorCount, void *const readBuffer ) final override;
 
       Chimera::Modules::Memory::BlockStatus DiskWrite( const uint8_t volNum, const uint64_t sectorStart,
-                                                       const uint32_t sectorCount, const void *const writeBuffer ) final override;
+                                                       const uint32_t sectorCount,
+                                                       const void *const writeBuffer ) final override;
 
       Chimera::Modules::Memory::BlockStatus DiskFlush( const uint8_t volNum ) final override;
 
       /*------------------------------------------------
       Generic Flash Interface Functions
       ------------------------------------------------*/
+      bool isInitialized() final override;
+
       Chimera::Status_t write( const uint32_t address, const uint8_t *const data, const uint32_t length ) final override;
-      
+
       Chimera::Status_t read( const uint32_t address, uint8_t *const data, const uint32_t length ) final override;
-      
+
       Chimera::Status_t erase( const uint32_t begin, const uint32_t end ) final override;
-      
+
       Chimera::Status_t writeCompleteCallback( const Chimera::void_func_uint32_t func ) final override;
-      
+
       Chimera::Status_t readCompleteCallback( const Chimera::void_func_uint32_t func ) final override;
-      
+
       Chimera::Status_t eraseCompleteCallback( const Chimera::void_func_uint32_t func ) final override;
 
-private:
-
-      #if defined( GMOCK_TEST )
+    private:
+#if defined( GMOCK_TEST )
       Chimera::Mock::SPIMock *spi;
-      #else
+#else
       Chimera::SPI::SPIClass_sPtr spi; /**< SPI object used for talking with the flash chip */
-      #endif
+#endif
 
       Chimera::SPI::Setup setup; /**< SPI initialization settings */
 
       FlashChip device;       /**< Holds the device model number */
       AT45xx_DeviceInfo info; /**< Information regarding flash chip specifics */
 
+      bool initialized = false;
       bool writeComplete      = false;
       bool readComplete       = false;
       uint32_t clockFrequency = 0;    /**< Contains actual frequency of the SPI clock in Hz */
@@ -472,7 +418,7 @@ private:
        *   @param[in]  range       TODO
        *   @return TODO
        */
-      Adesto::Status eraseRanges( const MemoryRange range, func_t onComplete = nullptr );
+      Chimera::Status_t eraseRanges( const MemoryRange range, Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**
        *   Erases a given sector
@@ -565,8 +511,6 @@ private:
        */
       void SPI_read( uint8_t *const data, const uint32_t len, const bool disableSS = true );
     };
-    typedef std::shared_ptr<AT45> AT45_sPtr;
-    typedef std::unique_ptr<AT45> AT45_uPtr;
   }  // namespace NORFlash
 }  // namespace Adesto
 #endif /* AT45DB081_HPP */

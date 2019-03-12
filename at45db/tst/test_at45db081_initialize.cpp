@@ -29,6 +29,7 @@ using ::testing::Return;
 using ::testing::SetArgPointee;
 using ::testing::SetArrayArgument;
 
+using ErrCode = Chimera::Modules::Memory::Status;
 
 TEST( AT45Initialize, SPIFailedInit )
 {
@@ -51,7 +52,7 @@ TEST( AT45Initialize, SPIFailedInit )
   /*------------------------------------------------
   Verify
   ------------------------------------------------*/
-  EXPECT_EQ( Adesto::Status::ERROR_SPI_INIT_FAILED, flash.initialize( chip ) );
+  EXPECT_EQ( ErrCode::FAILED_INIT, flash.init( chip ) );
 }
 
 TEST( AT45Initialize, BadDeviceInfoLowSpeed )
@@ -81,7 +82,7 @@ TEST( AT45Initialize, BadDeviceInfoLowSpeed )
   /*------------------------------------------------
   Verify
   ------------------------------------------------*/
-  EXPECT_EQ( Adesto::Status::ERROR_UNKNOWN_JEDEC_CODE, flash.initialize( chip ) );
+  EXPECT_EQ( ErrCode::UNKNOWN_JEDEC, flash.init( chip ) );
 }
 
 TEST( AT45Initialize, BadDeviceInfoHighSpeed )
@@ -114,7 +115,7 @@ TEST( AT45Initialize, BadDeviceInfoHighSpeed )
   /*------------------------------------------------
   Verify
   ------------------------------------------------*/
-  EXPECT_EQ( Adesto::Status::ERROR_FAILED_HIGH_FREQUENCY_TRANSACTION, flash.initialize( chip ) );
+  EXPECT_EQ( ErrCode::HF_INIT_FAIL, flash.init( chip ) );
 }
 
 TEST( AT45Initialize, FailedBinaryPageSizeConfig )
@@ -149,7 +150,7 @@ TEST( AT45Initialize, FailedBinaryPageSizeConfig )
   /*------------------------------------------------
   Verify
   ------------------------------------------------*/
-  EXPECT_EQ( Adesto::Status::ERROR_PAGE_SIZE_MISMATCH, flash.initialize( chip ) );
+  EXPECT_EQ( ErrCode::FAIL, flash.init( chip ) );
 }
 
 TEST( AT45Initialize, InitializationSuccess )
@@ -174,7 +175,8 @@ TEST( AT45Initialize, InitializationSuccess )
   ------------------------------------------------*/
   // clang-format off
 
-  EXPECT_CALL( spi, init( _ ) ).Times( Exactly( 1 ) )
+  EXPECT_CALL( spi, init( _ ) )
+    .Times( Exactly( 1 ) )
     .WillRepeatedly( Return( Chimera::SPI::Status::OK ) );
 
   EXPECT_CALL( spi, readBytes( _, _, _ ) )
@@ -189,13 +191,16 @@ TEST( AT45Initialize, InitializationSuccess )
   /*------------------------------------------------
   Verify
   ------------------------------------------------*/
-  EXPECT_EQ( Adesto::Status::FLASH_OK, flash.initialize( chip ) );
+  EXPECT_EQ( ErrCode::OK, flash.init( chip ) );
+  EXPECT_EQ( true, flash.isInitialized() );
 }
 
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
 #include "bus_pirate.hpp"
+
+using ErrCode = Chimera::Modules::Memory::Status;
 
 TEST( AT45InitializeHW, initSuccess )
 {
@@ -208,9 +213,9 @@ TEST( AT45InitializeHW, initSuccess )
   Adesto::NORFlash::AT45 flash( spi );
 
   Adesto::FlashChip chip = Adesto::FlashChip::AT45DB081E;
-  auto result = flash.initialize(chip);
+  auto result = flash.init(chip);
 
-  EXPECT_EQ( Adesto::Status::FLASH_OK, result );
+  EXPECT_EQ( ErrCode::OK, result );
 }
 
 #endif /* HW_TEST */

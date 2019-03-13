@@ -120,13 +120,13 @@ namespace Adesto
        *          wrap around to the beginning of the SRAM buffer.
        *
        *	@param[in]	bufferNumber	Selects which SRAM buffer to write to
-       *	@param[in]	startAddress	Starting write address. Can be any value from 0 to the current page size
-       *	@param[out] dataIn			  External array to transmit in (do not modify contents until write is complete)
+       *	@param[in]	offset      	Starting write address. Can be any value from 0 to the current page size
+       *	@param[out] dataIn			  External array of data to be loaded to the buffer
        *	@param[in]	len				    Number of bytes to write
        *	@param[in]	onComplete		Optional function pointer to execute upon task completion
        *	@return Chimera::Status_t
        **/
-      Chimera::Status_t bufferLoad( const SRAMBuffer bufferNumber, const uint16_t startAddress, const uint8_t *const dataIn,
+      Chimera::Status_t bufferLoad( const SRAMBuffer bufferNumber, const uint16_t offset, const uint8_t *const dataIn,
                                     const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**

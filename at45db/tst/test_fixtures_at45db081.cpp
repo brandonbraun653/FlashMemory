@@ -1,18 +1,14 @@
 /********************************************************************************
  *  File Name:
  *    test_fixtures_at45db081.cpp
- *  
+ *
  *  Description:
  *    Provides several test fixtures used in testing the AT45DB081
- *  
+ *
  *  2019 | Brandon Braun | brandonbraun653@gmail.com
  ********************************************************************************/
 
 #include "test_fixtures_at45db081.hpp"
-
-/* Test Driver Includes */
-#include <gtest/gtest.h>
-
 
 #if defined( GMOCK_TEST )
 using ::testing::_;
@@ -71,6 +67,36 @@ void VirtualFlash::passInit()
 
 void VirtualFlash::testReset()
 {
-  
+
 }
-#endif 
+#endif /* GMOCK_TEST */
+
+#if defined( HW_TEST )
+#include <bus_pirate.hpp>
+
+void HardwareFlash::SetUp()
+{
+  std::string device = "COM7";
+  HWInterface::BusPirate::Device bp( device );
+  spi = std::make_shared<Chimera::SPI::SPIClass>( bp );
+
+  flash = new Adesto::NORFlash::AT45( spi );
+}
+
+void HardwareFlash::TearDown()
+{
+  delete flash;
+}
+
+void HardwareFlash::testReset()
+{
+}
+
+void HardwareFlash::passInit()
+{
+  EXPECT_EQ( ErrCode::OK, flash->init( Adesto::AT45DB081E ) );
+  EXPECT_EQ( true, flash->isInitialized() );
+}
+#endif /* HW_TEST */
+
+

@@ -14,6 +14,7 @@
 /* Testing Framework Includes */
 #include <gtest/gtest.h>
 #include <Chimera/spi.hpp>
+#include "test_fixtures_at45db081.hpp"
 
 #if defined( GMOCK_TEST )
 /* Mock Includes */
@@ -29,9 +30,29 @@ using ::testing::Return;
 using ::testing::SetArgPointee;
 using ::testing::SetArrayArgument;
 
+TEST_F( VirtualFlash, BufferRead_PreInitialization )
+{
+  uint8_t someData[] = { 1, 2, 3, 4 };
+  EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED,
+             flash->bufferRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, someData, 0xFFFF ) );
+}
+
+TEST_F( VirtualFlash, BufferRead_NullPointerInput )
+{
+  passInit();
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM,
+             flash->bufferRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, nullptr, 0xFFFF ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM,
+             flash->bufferRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, NULL, 0xFFFF ) );
+}
+
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
-#include "bus_pirate.hpp"
-
+/*------------------------------------------------
+Due to hardware tests on read also requiring a load, the testing of both
+bufferRead & bufferLoad occur in test_at45db081_bufferLoad.cpp.
+------------------------------------------------*/
 #endif /* HW_TEST */

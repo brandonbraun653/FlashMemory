@@ -101,18 +101,21 @@ namespace Adesto
       },
     };
 
+    static constexpr uint8_t BUFFER_LOAD_CMD_LEN = 4; /**< CMD(1) + Address(3) */
+    static constexpr uint8_t BUFFER_READ_CMD_LEN = 5; /**< CMD(1) + Address(3) + Dummy(1) */
+
     Chimera::Status_t AT45::init( const FlashChip chip )
     {
-      uint32_t userClockFreq = 1000000;
+      uint32_t userClockFreq       = 1000000;
       Chimera::Status_t initResult = Chimera::CommonStatusCodes::FAIL;
 
-      device = chip;
+      device      = chip;
       initialized = false;
       cmdBuffer.fill( 0 );
       addressBytes = addressFormat[ device ].numAddressBytes;
 
       /*------------------------------------------------
-      Initialize the SPI device with the correct parameters 
+      Initialize the SPI device with the correct parameters
       ------------------------------------------------*/
       setup.clockFrequency = 1000000;
       setup.bitOrder       = BitOrder::MSB_FIRST;
@@ -156,73 +159,43 @@ namespace Adesto
       }
 
       initialized = ( initResult == ErrCode::OK );
-      
+
       return initResult;
     }
 
-    Chimera::Status_t AT45::directPageRead( const uint16_t pageNumber, const uint16_t pageOffset, uint8_t *const dataOut,
-                                            const uint32_t len, Chimera::void_func_uint32_t onComplete /*= nullptr */ )
-    {
-      cmdBuffer[ 0 ] = MAIN_MEM_PAGE_READ;
-      buildReadWriteCommand( pageNumber, pageOffset );
-
-      /*------------------------------------------------
-      The command is comprised of an opcode (1 byte), an address (3 bytes), and 4 dummy bytes.
-      The dummy bytes are used to initialize the read operation.
-      ------------------------------------------------*/
-      SPI_write( cmdBuffer.data(), 8, false );
-      SPI_read( dataOut, len, true );
-
-      if ( onComplete )
-      {
-        onComplete( 0 );
-      }
-
-      return ErrCode::OK;
-    }
-
-    Chimera::Status_t AT45::bufferRead( const SRAMBuffer bufferNumber, const uint16_t offset, uint8_t *const dataOut,
-                                        const uint32_t len, Chimera::void_func_uint32_t onComplete /*= nullptr */ )
-    {
-      if ( clockFrequency > 50000000 )  // 50 MHz
-        cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1) ? BUFFER1_READ_HF : BUFFER2_READ_HF;
-      else
-        cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1) ? BUFFER1_READ_LF : BUFFER2_READ_LF;
-
-      SPI_write( cmdBuffer.data(), 5, false );
-      SPI_read( dataOut, len, true );
-
-      if ( onComplete )
-        onComplete( 0 );
-
-      return ErrCode::OK;
-    }
-
-    Chimera::Status_t AT45::bufferLoad( const SRAMBuffer bufferNumber, const uint16_t startAddress, const uint8_t *const dataIn,
+    Chimera::Status_t AT45::bufferLoad( const SRAMBuffer bufferNumber, const uint16_t offset, const uint8_t *const dataIn,
                                         const uint32_t len, Chimera::void_func_uint32_t onComplete )
     {
       Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
-      if (!initialized)
+      if ( !initialized )
       {
         error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
       }
-      else if (!dataIn)
+      else if ( !dataIn )
       {
         error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
       }
       else
       {
-        /* In this case, the page number input is ignored by the flash chip. Only the offset within the buffer is valid.
-         * See datasheet section labeled 'Buffer Write' for more details. */
-        cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1) ? BUFFER1_WRITE : BUFFER2_WRITE;
-        buildReadWriteCommand( 0x0000, startAddress );
+        /*------------------------------------------------
+        In the buildReadWriteCommand, the page number is 0 because we are only writing
+        to SRAM buffers. The data isn't actually being written to a page yet.
 
-        SPI_write( cmdBuffer.data(), 4, false );
+        See: (6.1) Buffer Write in the device datasheet
+        ------------------------------------------------*/
+        cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? BUFFER1_WRITE : BUFFER2_WRITE;
+        buildReadWriteCommand( 0, offset );
+
+        SPI_write( cmdBuffer.data(), BUFFER_LOAD_CMD_LEN, false );
         SPI_write( dataIn, len, true );
 
         if ( onComplete )
+        {
           onComplete( 0 );
+        }
+
+        error = Chimera::CommonStatusCodes::OK;
       }
 
       return error;
@@ -261,9 +234,72 @@ namespace Adesto
           onComplete( 0 );
         }
       }
-      
+
       return error;
     }
+
+    Chimera::Status_t AT45::bufferRead( const SRAMBuffer bufferNumber, const uint16_t offset, uint8_t *const dataOut,
+                                        const uint32_t len, Chimera::void_func_uint32_t onComplete )
+    {
+      Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
+
+      if ( !initialized )
+      {
+        error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
+      }
+      else if ( !dataOut )
+      {
+        error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
+      }
+      else
+      {
+        if ( clockFrequency > 50000000 ) /* 50 MHz Clock */
+        {
+          cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? BUFFER1_READ_HF : BUFFER2_READ_HF;
+        }
+        else
+        {
+          cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? BUFFER1_READ_LF : BUFFER2_READ_LF;
+        }
+
+        /*------------------------------------------------
+        Load the cmdBuffer with the correct addressing bytes
+        ------------------------------------------------*/
+        buildReadWriteCommand( 0, offset );
+
+        SPI_write( cmdBuffer.data(), BUFFER_READ_CMD_LEN, false );
+        SPI_read( dataOut, len, true );
+
+        if ( onComplete )
+        {
+          onComplete( 0 );
+        }
+      }
+
+      return error;
+    }
+
+    Chimera::Status_t AT45::directPageRead( const uint16_t pageNumber, const uint16_t pageOffset, uint8_t *const dataOut,
+                                            const uint32_t len, Chimera::void_func_uint32_t onComplete /*= nullptr */ )
+    {
+      cmdBuffer[ 0 ] = MAIN_MEM_PAGE_READ;
+      buildReadWriteCommand( pageNumber, pageOffset );
+
+      /*------------------------------------------------
+      The command is comprised of an opcode (1 byte), an address (3 bytes), and 4 dummy bytes.
+      The dummy bytes are used to initialize the read operation.
+      ------------------------------------------------*/
+      SPI_write( cmdBuffer.data(), 8, false );
+      SPI_read( dataOut, len, true );
+
+      if ( onComplete )
+      {
+        onComplete( 0 );
+      }
+
+      return ErrCode::OK;
+    }
+
 
     Chimera::Status_t AT45::pageWrite( const SRAMBuffer bufferNumber, const uint16_t bufferOffset, const uint16_t pageNumber,
                                        const uint8_t *const dataIn, const uint32_t len,
@@ -271,8 +307,8 @@ namespace Adesto
     {
       /* Generate the full command sequence. See data sheet section labeled 'Main Memory Page Program through Buffer with
        * Built-In Erase' */
-      cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1) ? MAIN_MEM_PAGE_PGM_THR_BUFFER1_W_ERASE
-                                                   : MAIN_MEM_PAGE_PGM_THR_BUFFER2_W_ERASE;
+      cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? MAIN_MEM_PAGE_PGM_THR_BUFFER1_W_ERASE
+                                                               : MAIN_MEM_PAGE_PGM_THR_BUFFER2_W_ERASE;
       buildReadWriteCommand( pageNumber, bufferOffset );
 
       SPI_write( cmdBuffer.data(), 4, false );
@@ -317,7 +353,7 @@ namespace Adesto
                                              uint32_t len, Chimera::void_func_uint32_t onComplete /*= nullptr */ )
     {
       /* Generate the full command sequence. See datasheet section labeled 'Read-Modify-Write' */
-      cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1) ? AUTO_PAGE_REWRITE1 : AUTO_PAGE_REWRITE2;
+      cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? AUTO_PAGE_REWRITE1 : AUTO_PAGE_REWRITE2;
       buildReadWriteCommand( pageNumber, pageOffset );
 
       SPI_write( cmdBuffer.data(), 4, false );
@@ -741,36 +777,48 @@ namespace Adesto
       SPI_write( cmdBuffer.data(), ( BYTE_LEN( PAGE_ERASE ) + addressBytes ), true );
     }
 
-    void AT45::buildReadWriteCommand( const uint16_t pageNumber, const uint16_t offset /*= 0x0000*/ )
+    void AT45::buildReadWriteCommand( const uint16_t pageNumber, const uint16_t offset )
     {
-      /* Grab the correct page configuration. This informs the code how much bit shifting to apply */
+      /*------------------------------------------------
+      Grab the correct page configuration size. This informs the code
+      how much bit shifting to apply when building the command.
+      ------------------------------------------------*/
       const AddressDescriptions *config;
       if ( pageSize == STANDARD_PAGE_SIZE )
+      {
         config = &addressFormat[ device ].page.standardSize;
+      }
       else
+      {
         config = &addressFormat[ device ].page.binarySize;
+      }
 
-      /* Generate masks of the correct bit width to clean up the input variables */
+      /*------------------------------------------------
+      Generate masks of the correct bit width to clean up the input variables
+      ------------------------------------------------*/
       uint32_t addressBitMask = ( 1u << config->addressBits ) - 1u;
       uint32_t offsetBitMask  = ( 1u << config->dummyBitsLSB ) - 1u;
 
-      /*	The full address is really only 3 bytes wide. They are set up as follows, with 'a' == address bit,
-       *	'o' == offset bit and 'x' == don't care. This is the exact order in which it must be transmitted. (ie MSB first)
-       *								 Byte 1 | Byte 2 | Byte 3
-       *		For 264 byte page size: xxxaaaaa|aaaaaaao|oooooooo
-       *		For 256 byte page size: xxxxaaaa|aaaaaaaa|oooooooo
-       */
+      /*------------------------------------------------
+       The full address is really only 3 bytes wide. They are set up as
+       follows, with 'a' == address bit, 'o' == offset bit and 'x' == don't care.
+       This is the exact order in which it must be transmitted. (ie MSB first)
+
+                               Byte 1 | Byte 2 | Byte 3
+      For 264 byte page size: xxxaaaaa|aaaaaaao|oooooooo
+      For 256 byte page size: xxxxaaaa|aaaaaaaa|oooooooo
+      ------------------------------------------------*/
       uint32_t fullAddress = ( ( pageNumber & addressBitMask ) << config->dummyBitsLSB ) | ( offsetBitMask & offset );
 
-
-      /*	Note: Cannot use memcpy because it reverses the byte order expected by the flash chip.
-       *	For example, if the value of 'fullAddress' were 0xAABBCC, the memcpy would put the values into the cmdBuffer as
+      /*------------------------------------------------
+      Note: Cannot use memcpy because it reverses the byte order expected by the flash chip.
+      For example, if the value of 'fullAddress' were 0xAABBCC, the memcpy would put the values into the cmdBuffer as
        *0xCCBBAA. This is correct as far as the MCU is concerned, but the flash chip needs the data exactly as calculated:
        *0xAABBCC
-       */
+      ------------------------------------------------*/
       cmdBuffer[ 1 ] = ( fullAddress & 0xFF0000 ) >> 16;
       cmdBuffer[ 2 ] = ( fullAddress & 0x00FF00 ) >> 8;
-      cmdBuffer[ 3 ] = fullAddress & 0x0000FF;
+      cmdBuffer[ 3 ] = ( fullAddress & 0x0000FF );
     }
 
     void AT45::buildEraseCommand( const FlashSection section, const uint32_t sectionNumber )

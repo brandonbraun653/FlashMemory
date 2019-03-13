@@ -51,6 +51,23 @@ TEST_F(VirtualFlash, BufferLoad_NullPointerInput)
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
-#include "bus_pirate.hpp"
+
+TEST_F(HardwareFlash, BufferLoadRead_OffsetBeginning)
+{
+  using namespace Adesto;
+
+  auto offset = 0;
+
+  const uint8_t arraySize = 10;
+  std::array<uint8_t, arraySize> loadData = { 0x00, 0x22, 0x44, 0x66, 0x88, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE };
+  std::array<uint8_t, arraySize> readData = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
+  passInit();
+
+  EXPECT_EQ( ErrCode::OK, flash->bufferLoad( SRAMBuffer::BUFFER1, offset, loadData.data(), loadData.size() ) );
+  EXPECT_EQ( ErrCode::OK, flash->bufferRead( SRAMBuffer::BUFFER1, offset, readData.data(), readData.size() ) );
+  EXPECT_EQ( 0, memcmp( loadData.data(), readData.data(), arraySize ) );
+
+}
 
 #endif /* HW_TEST */

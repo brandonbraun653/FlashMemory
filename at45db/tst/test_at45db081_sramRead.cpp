@@ -30,44 +30,29 @@ using ::testing::Return;
 using ::testing::SetArgPointee;
 using ::testing::SetArrayArgument;
 
-TEST_F( VirtualFlash, BufferLoad_PreInitialization )
+TEST_F( VirtualFlash, BufferRead_PreInitialization )
 {
-  const uint8_t someData[] = { 1, 2, 3, 4 };
+  uint8_t someData[] = { 1, 2, 3, 4 };
   EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED,
-             flash->bufferLoad( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, someData, 0xFFFF ) );
+             flash->sramRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, someData, 0xFFFF ) );
 }
 
-TEST_F(VirtualFlash, BufferLoad_NullPointerInput)
+TEST_F( VirtualFlash, BufferRead_NullPointerInput )
 {
   passInit();
 
   EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM,
-             flash->bufferLoad( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, nullptr, 0xFFFF ) );
+             flash->sramRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, nullptr, 0xFFFF ) );
 
   EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM,
-             flash->bufferLoad( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, NULL, 0xFFFF ) );
+             flash->sramRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, NULL, 0xFFFF ) );
 }
 
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
-
-TEST_F(HardwareFlash, BufferLoadRead_OffsetBeginning)
-{
-  using namespace Adesto;
-
-  auto offset = 0;
-
-  const uint8_t arraySize = 10;
-  std::array<uint8_t, arraySize> loadData = { 0x00, 0x22, 0x44, 0x66, 0x88, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE };
-  std::array<uint8_t, arraySize> readData = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
-  passInit();
-
-  EXPECT_EQ( ErrCode::OK, flash->bufferLoad( SRAMBuffer::BUFFER1, offset, loadData.data(), loadData.size() ) );
-  EXPECT_EQ( ErrCode::OK, flash->bufferRead( SRAMBuffer::BUFFER1, offset, readData.data(), readData.size() ) );
-  EXPECT_EQ( 0, memcmp( loadData.data(), readData.data(), arraySize ) );
-
-}
-
+/*------------------------------------------------
+Due to hardware tests on read also requiring a load, the testing of both
+bufferRead & bufferLoad occur in test_at45db081_bufferLoad.cpp.
+------------------------------------------------*/
 #endif /* HW_TEST */

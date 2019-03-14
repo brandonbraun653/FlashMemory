@@ -94,8 +94,10 @@ void HardwareFlash::testReset()
 
 void HardwareFlash::passInit()
 {
-  EXPECT_EQ( ErrCode::OK, flash->init( Adesto::AT45DB081E ) );
-  EXPECT_EQ( true, flash->isInitialized() );
+  ASSERT_EQ( ErrCode::OK, flash->init( Adesto::AT45DB081E ) );
+  ASSERT_EQ( true, flash->isInitialized() );
+
+  Chimera::delayMilliseconds( 100 );
 }
 #endif /* HW_TEST */
 

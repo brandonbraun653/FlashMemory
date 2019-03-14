@@ -101,9 +101,6 @@ namespace Adesto
       },
     };
 
-    static constexpr uint8_t BUFFER_LOAD_CMD_LEN = 4; /**< CMD(1) + Address(3) */
-    static constexpr uint8_t BUFFER_READ_CMD_LEN = 5; /**< CMD(1) + Address(3) + Dummy(1) */
-
     Chimera::Status_t AT45::init( const FlashChip chip )
     {
       uint32_t userClockFreq       = 1000000;
@@ -163,8 +160,8 @@ namespace Adesto
       return initResult;
     }
 
-    Chimera::Status_t AT45::bufferLoad( const SRAMBuffer bufferNumber, const uint16_t offset, const uint8_t *const dataIn,
-                                        const uint32_t len, Chimera::void_func_uint32_t onComplete )
+    Chimera::Status_t AT45::sramLoad( const SRAMBuffer bufferNumber, const uint16_t offset, const uint8_t *const dataIn,
+                                      const uint32_t len, Chimera::void_func_uint32_t onComplete )
     {
       Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
@@ -178,6 +175,8 @@ namespace Adesto
       }
       else
       {
+        static constexpr uint8_t BUFFER_LOAD_CMD_LEN = 4; /**< CMD(1) + Address(3) */
+
         /*------------------------------------------------
         In the buildReadWriteCommand, the page number is 0 because we are only writing
         to SRAM buffers. The data isn't actually being written to a page yet.
@@ -201,45 +200,8 @@ namespace Adesto
       return error;
     }
 
-    Chimera::Status_t AT45::bufferWrite( const SRAMBuffer bufferNumber, const uint16_t pageNumber, const bool erase,
-                                         Chimera::void_func_uint32_t onComplete )
-    {
-      Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
-
-      if ( !initialized )
-      {
-        error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
-      }
-      else
-      {
-        if ( erase )
-        {
-          cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? BUFFER1_TO_MAIN_MEM_PAGE_PGM_W_ERASE
-                                                                   : BUFFER2_TO_MAIN_MEM_PAGE_PGM_W_ERASE;
-        }
-        else
-        {
-          cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? BUFFER1_TO_MAIN_MEM_PAGE_PGM_WO_ERASE
-                                                                   : BUFFER2_TO_MAIN_MEM_PAGE_PGM_WO_ERASE;
-        }
-
-        /* This command is opposite of 'bufferLoad()'. Only the page number is valid and then offset is ignored.
-         * See datasheet section labeled 'Buffer to Main Memory Page Program with/without Built-In Erase' for more details. */
-        buildReadWriteCommand( pageNumber, 0x0000 );
-
-        SPI_write( cmdBuffer.data(), 4, true );
-
-        if ( onComplete )
-        {
-          onComplete( 0 );
-        }
-      }
-
-      return error;
-    }
-
-    Chimera::Status_t AT45::bufferRead( const SRAMBuffer bufferNumber, const uint16_t offset, uint8_t *const dataOut,
-                                        const uint32_t len, Chimera::void_func_uint32_t onComplete )
+    Chimera::Status_t AT45::sramRead( const SRAMBuffer bufferNumber, const uint16_t offset, uint8_t *const dataOut,
+                                      const uint32_t len, Chimera::void_func_uint32_t onComplete )
     {
       Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
@@ -253,9 +215,12 @@ namespace Adesto
       }
       else
       {
+        uint32_t readCmdLen = 4; /**< CMD(1) + Address(3) */
+
         if ( clockFrequency > 50000000 ) /* 50 MHz Clock */
         {
           cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? BUFFER1_READ_HF : BUFFER2_READ_HF;
+          readCmdLen += 1; /**< + Init(1) */
         }
         else
         {
@@ -267,37 +232,100 @@ namespace Adesto
         ------------------------------------------------*/
         buildReadWriteCommand( 0, offset );
 
-        SPI_write( cmdBuffer.data(), BUFFER_READ_CMD_LEN, false );
+        SPI_write( cmdBuffer.data(), readCmdLen, false );
         SPI_read( dataOut, len, true );
 
         if ( onComplete )
         {
           onComplete( 0 );
         }
+
+        error = Chimera::CommonStatusCodes::OK;
+      }
+
+      return error;
+    }
+
+    Chimera::Status_t AT45::sramCommit( const SRAMBuffer bufferNumber, const uint16_t pageNumber, const bool erase,
+                                        Chimera::void_func_uint32_t onComplete )
+    {
+      Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
+
+      if ( !initialized )
+      {
+        error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
+      }
+      else
+      {
+        static constexpr uint8_t SRAM_COMMIT_CMD_LEN = 4; /**< CMD(1) + Address(3) */
+
+        if ( erase )
+        {
+          cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? BUFFER1_TO_MAIN_MEM_PAGE_PGM_W_ERASE
+                                                                   : BUFFER2_TO_MAIN_MEM_PAGE_PGM_W_ERASE;
+        }
+        else
+        {
+          cmdBuffer[ 0 ] = ( bufferNumber == SRAMBuffer::BUFFER1 ) ? BUFFER1_TO_MAIN_MEM_PAGE_PGM_WO_ERASE
+                                                                   : BUFFER2_TO_MAIN_MEM_PAGE_PGM_WO_ERASE;
+        }
+
+        /*------------------------------------------------
+        Only the page number is valid and then offset is ignored.
+        See: (6.2) 'Buffer to Main Memory Page Program with/without Built-In Erase'
+        ------------------------------------------------*/
+        buildReadWriteCommand( pageNumber, 0x0000 );
+        SPI_write( cmdBuffer.data(), SRAM_COMMIT_CMD_LEN, true );
+
+        if ( onComplete )
+        {
+          onComplete( 0 );
+        }
+
+        error = Chimera::CommonStatusCodes::OK;
       }
 
       return error;
     }
 
     Chimera::Status_t AT45::directPageRead( const uint16_t pageNumber, const uint16_t pageOffset, uint8_t *const dataOut,
-                                            const uint32_t len, Chimera::void_func_uint32_t onComplete /*= nullptr */ )
+                                            const uint32_t len, Chimera::void_func_uint32_t onComplete )
     {
-      cmdBuffer[ 0 ] = MAIN_MEM_PAGE_READ;
-      buildReadWriteCommand( pageNumber, pageOffset );
+      Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
-      /*------------------------------------------------
-      The command is comprised of an opcode (1 byte), an address (3 bytes), and 4 dummy bytes.
-      The dummy bytes are used to initialize the read operation.
-      ------------------------------------------------*/
-      SPI_write( cmdBuffer.data(), 8, false );
-      SPI_read( dataOut, len, true );
-
-      if ( onComplete )
+      if ( !initialized )
       {
-        onComplete( 0 );
+        error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
+      }
+      else if( !dataOut )
+      {
+        error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
+      }
+      else
+      {
+        static constexpr uint8_t MAIN_MEM_PAGE_READ_CMD_LEN = 8;
+
+        cmdBuffer[ 0 ] = MAIN_MEM_PAGE_READ;
+        buildReadWriteCommand( pageNumber, pageOffset );
+
+        /*------------------------------------------------
+        The command is comprised of an opcode (1 byte), an address (3 bytes), and 4 dummy bytes.
+        The dummy bytes are used to initialize the read operation.
+
+        See: (5.6) Main Memory Page Read
+        ------------------------------------------------*/
+        SPI_write( cmdBuffer.data(), MAIN_MEM_PAGE_READ_CMD_LEN, false );
+        SPI_read( dataOut, len, true );
+
+        if ( onComplete )
+        {
+          onComplete( 0 );
+        }
+
+        error = ErrCode::OK;
       }
 
-      return ErrCode::OK;
+      return error;
     }
 
 
@@ -542,10 +570,16 @@ namespace Adesto
       return tmp;
     }
 
-    bool AT45::isDeviceReady( StatusRegister *const reg /*= nullptr*/ )
+    bool AT45::isDeviceReady( StatusRegister *const reg )
     {
-      auto val = readStatusRegister( reg );
-      return ( val & READY_BUSY_Pos );
+      bool retVal = false;
+
+      if( initialized )
+      {
+        retVal = readStatusRegister( reg ) & READY_BUSY_Pos;
+      }
+
+      return retVal;
     }
 
     bool AT45::isErasePgmError( StatusRegister *const reg /*= nullptr*/ )
@@ -983,6 +1017,11 @@ namespace Adesto
           return 0;
           break;
       }
+    }
+
+    uint32_t AT45::getPageSize()
+    {
+      return pageSize;
     }
 
     BlockStatus AT45::DiskOpen( const uint8_t volNum, BlockMode openMode )

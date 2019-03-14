@@ -14,6 +14,7 @@
 /* Testing Framework Includes */
 #include <gtest/gtest.h>
 #include <Chimera/spi.hpp>
+#include "test_fixtures_at45db081.hpp"
 
 #if defined( GMOCK_TEST )
 /* Mock Includes */
@@ -29,9 +30,24 @@ using ::testing::Return;
 using ::testing::SetArgPointee;
 using ::testing::SetArrayArgument;
 
+TEST_F( VirtualFlash, DirectPageRead_PreInitialization )
+{
+  uint8_t fakeData[] = { 0, 0};
+  EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED, flash->directPageRead( 0, 0, fakeData, 0 ) );
+}
+
+TEST_F( VirtualFlash, DirectPageRead_NullPtrInput )
+{
+  passInit();
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM, flash->directPageRead( 0, 0, nullptr, 0 ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM, flash->directPageRead( 0, 0, NULL, 0 ) );
+}
+
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
-#include "bus_pirate.hpp"
-
+/*------------------------------------------------
+The read functionality will be HW tested along with the write functions.
+------------------------------------------------*/
 #endif /* HW_TEST */

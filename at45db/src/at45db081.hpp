@@ -126,23 +126,8 @@ namespace Adesto
        *	@param[in]	onComplete		Optional function pointer to execute upon task completion
        *	@return Chimera::Status_t
        **/
-      Chimera::Status_t bufferLoad( const SRAMBuffer bufferNumber, const uint16_t offset, const uint8_t *const dataIn,
-                                    const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
-
-      /**
-       *  Writes a full page of data stored in an SRAM buffer to memory
-       *
-       *	@note	If setting erase = false, the page must be erased by some other means before
-       *           programming, otherwise an error will occur.
-       *
-       *	@param[in]	bufferNumber	Selects which SRAM buffer to write to memory
-       *	@param[in]	pageNumber		Page number in memory which will be written
-       *	@param[in]	erase			    Selects whether or not to automatically erase the page before writing
-       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
-       *	@return Chimera::Status_t
-       */
-      Chimera::Status_t bufferWrite( const SRAMBuffer bufferNumber, const uint16_t pageNumber, const bool erase,
-                                     Chimera::void_func_uint32_t onComplete = nullptr );
+      Chimera::Status_t sramLoad( const SRAMBuffer bufferNumber, const uint16_t offset, const uint8_t *const dataIn,
+                                  const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**
        *  Reads data from one of the internal SRAM buffers (not actual memory)
@@ -157,8 +142,23 @@ namespace Adesto
        *	@param[in]	onComplete		Optional function pointer to execute upon task completion
        *	@return Chimera::Status_t
        */
-      Chimera::Status_t bufferRead( const SRAMBuffer bufferNumber, const uint16_t offset, uint8_t *const dataOut,
-                                    const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
+      Chimera::Status_t sramRead( const SRAMBuffer bufferNumber, const uint16_t offset, uint8_t *const dataOut,
+                                  const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
+
+      /**
+       *  Writes a full page of data stored in an SRAM buffer to memory
+       *
+       *	@note	If erase == false, the page must be erased by some other means before
+       *           programming, otherwise an error will occur.
+       *
+       *	@param[in]	bufferNumber	Selects which SRAM buffer to write to memory
+       *	@param[in]	pageNumber		Page number in memory which will be written
+       *	@param[in]	erase			    Selects whether or not to automatically erase the page before writing
+       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t sramCommit( const SRAMBuffer bufferNumber, const uint16_t pageNumber, const bool erase,
+                                    Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**
        *  Reads data directly from a page in internal memory, bypassing both SRAM buffers without modification.
@@ -260,7 +260,7 @@ namespace Adesto
       uint16_t readStatusRegister( StatusRegister *const reg = nullptr );
 
       /**
-       *   Queries the flash chip status register and checks if the device is ready
+       *  Queries the flash chip status register and checks if the device is ready
        *
        *	@param[out]	reg	        Optional argument to return back all status register parameters that were read
        *	@return true if ready, false if not
@@ -268,7 +268,7 @@ namespace Adesto
       bool isDeviceReady( StatusRegister *const reg = nullptr );
 
       /**
-       *   Queries the flash chip status register and checks if an error occurred during programming or erasing
+       *  Queries the flash chip status register and checks if an error occurred during programming or erasing
        *
        *	@param[out]	reg	        Optional argument to return back all status register parameters that were read
        *	@return true if error, false if not
@@ -314,6 +314,8 @@ namespace Adesto
        *   @return Chip capacity
        */
       uint32_t getFlashSize();
+
+      uint32_t getPageSize();
 
       /*------------------------------------------------
       Block Device Interface Functions

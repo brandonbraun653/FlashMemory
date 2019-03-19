@@ -582,7 +582,7 @@ namespace Adesto
       return retVal;
     }
 
-    bool AT45::isErasePgmError( StatusRegister *const reg /*= nullptr*/ )
+    bool AT45::isErasePgmError( StatusRegister *const reg )
     {
       auto val = readStatusRegister( reg );
       return ( val & ERASE_PGM_ERROR_Pos );

@@ -43,6 +43,14 @@ namespace Adesto
 
   namespace NORFlash
   {
+    static constexpr uint16_t PAGE_SIZE_BINARY = 256u;
+    static constexpr uint32_t BLOCK_SIZE_BINARY = 2048u;
+    static constexpr uint32_t SECTOR_SIZE_BINARY = 65536u;
+
+    static constexpr uint16_t PAGE_SIZE_EXTENDED = 264u;
+    static constexpr uint32_t BLOCK_SIZE_EXTENDED = 2112u;
+    static constexpr uint32_t SECTOR_SIZE_EXTENDED = 67584u;
+
     /** Available Read Operations
      *	See: Datasheet Section 15
      **/

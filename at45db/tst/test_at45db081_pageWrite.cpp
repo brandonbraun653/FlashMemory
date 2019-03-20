@@ -1,6 +1,6 @@
 /********************************************************************************
  * File Name:
- *	  test_at45db081_read.cpp
+ *	  test_at45db081_pageWrite.cpp
  *
  * Description:
  *	  Implements tests for the AT45DB081 driver
@@ -14,24 +14,31 @@
 /* Testing Framework Includes */
 #include <gtest/gtest.h>
 #include <Chimera/spi.hpp>
+#include "test_fixtures_at45db081.hpp"
 
 #if defined( GMOCK_TEST )
 /* Mock Includes */
 #include <Chimera/mock/spi.hpp>
 #include <gmock/gmock.h>
 
-using ::testing::_;
-using ::testing::AtLeast;
-using ::testing::DoAll;
-using ::testing::Exactly;
-using ::testing::NiceMock;
-using ::testing::Return;
-using ::testing::SetArgPointee;
-using ::testing::SetArrayArgument;
+TEST_F( VirtualFlash, PageWrite_PreInit )
+{
+  uint8_t someData = 0u;
+  EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED, flash->pageWrite( Adesto::SRAMBuffer::BUFFER1, 0, 0, &someData, sizeof( someData ) ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED, flash->pageWrite( Adesto::SRAMBuffer::BUFFER2, 0, 0, &someData, sizeof( someData ) ) );
+}
 
+TEST_F( VirtualFlash, PageWrite_NullPtrInput )
+{
+  passInit();
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM, flash->pageWrite( Adesto::SRAMBuffer::BUFFER1, 0, 0, nullptr, 1 ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM, flash->pageWrite( Adesto::SRAMBuffer::BUFFER1, 0, 0, NULL, 1 ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM, flash->pageWrite( Adesto::SRAMBuffer::BUFFER2, 0, 0, nullptr, 1 ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM, flash->pageWrite( Adesto::SRAMBuffer::BUFFER2, 0, 0, NULL, 1 ) );
+}
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
-#include "bus_pirate.hpp"
-
 #endif /* HW_TEST */

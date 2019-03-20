@@ -118,41 +118,6 @@ TEST( AT45Initialize, BadDeviceInfoHighSpeed )
   EXPECT_EQ( ErrCode::HF_INIT_FAIL, flash.init( chip ) );
 }
 
-TEST( AT45Initialize, FailedBinaryPageSizeConfig )
-{
-  /*------------------------------------------------
-  Setup Test Objects
-  ------------------------------------------------*/
-  NiceMock<Chimera::Mock::SPIMock> spi;
-  Adesto::NORFlash::AT45 flash( &spi );
-
-  Adesto::FlashChip chip          = Adesto::FlashChip::AT45DB081E;
-  std::array<uint8_t, 3> goodInfo = { 0x1F, 0x25, 0x00 };
-  std::array<uint8_t, 2> fakeInfo = { 0u, 0u };
-
-  /*------------------------------------------------
-  Setup Mock Behavior
-  ------------------------------------------------*/
-  // clang-format off
-
-  EXPECT_CALL( spi, init( _ ) ).Times( Exactly( 1 ) )
-    .WillRepeatedly( Return( Chimera::SPI::Status::OK ) );
-
-  EXPECT_CALL( spi, readBytes( _, _, _ ) )
-    .WillOnce( DoAll( SetArrayArgument<0>( goodInfo.data(), goodInfo.data() + goodInfo.size() ),
-                      Return(Chimera::SPI::Status::OK)))
-    .WillOnce( DoAll( SetArrayArgument<0>( goodInfo.data(), goodInfo.data() + goodInfo.size() ),
-                      Return(Chimera::SPI::Status::OK)))
-    .WillOnce( DoAll( SetArrayArgument<0>( fakeInfo.data(), fakeInfo.data() + fakeInfo.size() ),
-                      Return(Chimera::SPI::Status::OK)));;
-
-  // clang-format on
-  /*------------------------------------------------
-  Verify
-  ------------------------------------------------*/
-  EXPECT_EQ( ErrCode::FAIL, flash.init( chip ) );
-}
-
 TEST( AT45Initialize, InitializationSuccess )
 {
   /*------------------------------------------------
@@ -183,9 +148,7 @@ TEST( AT45Initialize, InitializationSuccess )
     .WillOnce( DoAll( SetArrayArgument<0>( goodInfo.data(), goodInfo.data() + goodInfo.size() ),
                       Return(Chimera::SPI::Status::OK)))
     .WillOnce( DoAll( SetArrayArgument<0>( goodInfo.data(), goodInfo.data() + goodInfo.size() ),
-                      Return(Chimera::SPI::Status::OK)))
-    .WillOnce( DoAll( SetArrayArgument<0>( statusReg.data(), statusReg.data() + statusReg.size() ),
-                      Return(Chimera::SPI::Status::OK)));;
+                      Return(Chimera::SPI::Status::OK)));
 
   // clang-format on
   /*------------------------------------------------

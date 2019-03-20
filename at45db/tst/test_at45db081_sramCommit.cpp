@@ -1,6 +1,6 @@
 /********************************************************************************
  * File Name:
- *	  test_at45db081_read.cpp
+ *	  test_at45db081_sramCommit.cpp
  *
  * Description:
  *	  Implements tests for the AT45DB081 driver
@@ -26,16 +26,7 @@
 #include <Chimera/mock/spi.hpp>
 #include <gmock/gmock.h>
 
-using ::testing::_;
-using ::testing::AtLeast;
-using ::testing::DoAll;
-using ::testing::Exactly;
-using ::testing::NiceMock;
-using ::testing::Return;
-using ::testing::SetArgPointee;
-using ::testing::SetArrayArgument;
-
-TEST_F( VirtualFlash, SRAMCommit_PreInitialization )
+TEST_F( VirtualFlash, SRAMCommit_PreInit )
 {
   EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED,
              flash->sramCommit( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, false ) );

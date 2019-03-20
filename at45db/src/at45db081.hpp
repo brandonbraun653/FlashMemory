@@ -244,9 +244,22 @@ namespace Adesto
       Chimera::Status_t eraseChip();
 
       /**
+       *   Instruct the flash chip to use a binary page sizing: PAGE_SIZE_BINARY
+       *
+       *   @return Chimera::Status_t
+       */
+      Chimera::Status_t useBinaryPageSize();
+
+      /**
+       *   Instruct the flash chip to use the extended page sizing: PAGE_SIZE_EXTENDED
+       *   @return Chimera::Status_t
+       */
+      Chimera::Status_t useExtendedPageSize();
+
+      /**
        *  Queries the flash chip status register and determines the page size configuration setting
        *
-       *	@return 256 if in 'power of 2' mode or 264 if in 'standard data flash' mode
+       *	@return PAGE_SIZE_BINARY if in 'power of 2' mode or PAGE_SIZE_EXTENDED if in 'standard data flash' mode
        */
       uint16_t getPageSizeConfig();
 
@@ -265,7 +278,7 @@ namespace Adesto
        *	@param[out]	reg	        Optional argument to return back all status register parameters that were read
        *	@return true if ready, false if not
        */
-      bool isDeviceReady( StatusRegister *const reg = nullptr );
+      Chimera::Status_t isDeviceReady();
 
       /**
        *  Queries the flash chip status register and checks if an error occurred during programming or erasing
@@ -273,49 +286,42 @@ namespace Adesto
        *	@param[out]	reg	        Optional argument to return back all status register parameters that were read
        *	@return true if error, false if not
        */
-      bool isErasePgmError( StatusRegister *const reg = nullptr );
-
-      /**
-       *   Instruct the flash chip to use a binary (power of 2) page sizing
-       *   @return Chimera::Status_t
-       */
-      Chimera::Status_t useBinaryPageSize();
-
-      /**
-       *   Instruct the flash chip to use the alternate page sizing
-       *   @return Chimera::Status_t
-       */
-      Chimera::Status_t useDataFlashPageSize();
+      Chimera::Status_t isErasePgmError();
 
       /**
        *   Reads the device manufacturer ID and device ID. Also updates internal copy.
        *
        *	@return A struct of type AT45xx_DeviceInfo
        */
-      AT45xx_DeviceInfo getDeviceInfo();
-
-      /**
-       *   Checks an internal semaphore to see if an SPI read operation was completed
-       *
-       *   @return true if complete, false if not
-       */
-      bool isReadComplete();
-
-      /**
-       *   Checks an internal semaphore to see if an SPI write operation was completed
-       *
-       *   @return true if complete, false if not
-       */
-      bool isWriteComplete();
+      Chimera::Status_t getDeviceInfo( AT45xx_DeviceInfo &info );
 
       /**
        *   Gets the capacity of the discovered chip in bytes
        *
        *   @return Chip capacity
        */
-      uint32_t getFlashSize();
+      uint32_t getFlashCapacity();
 
-      uint32_t getPageSize();
+      /**
+       *	Gets the current page size in bytes
+       *
+       *	@return uint32_t
+       */
+       uint32_t getPageSize();
+
+      /**
+       *	Gets the current block size in bytes
+       *
+       *	@return uint32_t
+       */
+       uint32_t getBlockSize();
+
+      /**
+       *	Gets the current sector configuration size in bytes
+       *
+       *	@return uint32_t
+       */
+       uint32_t getSectorSQize();
 
       /*------------------------------------------------
       Block Device Interface Functions
@@ -361,9 +367,10 @@ namespace Adesto
       Chimera::SPI::Setup setup; /**< SPI initialization settings */
 
       FlashChip device;       /**< Holds the device model number */
-      AT45xx_DeviceInfo info; /**< Information regarding flash chip specifics */
+      AT45xx_DeviceInfo chipInfo; /**< Information regarding flash chip specifics */
 
-      bool initialized = false;
+      bool spiInitialized     = false;
+      bool chipInitialized    = false;
       bool writeComplete      = false;
       bool readComplete       = false;
       uint32_t clockFrequency = 0;    /**< Contains actual frequency of the SPI clock in Hz */

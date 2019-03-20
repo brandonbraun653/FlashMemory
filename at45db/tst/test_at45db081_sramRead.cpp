@@ -1,6 +1,6 @@
 /********************************************************************************
  * File Name:
- *	  test_at45db081_read.cpp
+ *	  test_at45db081_sramRead.cpp
  *
  * Description:
  *	  Implements tests for the AT45DB081 driver
@@ -20,15 +20,6 @@
 /* Mock Includes */
 #include <Chimera/mock/spi.hpp>
 #include <gmock/gmock.h>
-
-using ::testing::_;
-using ::testing::AtLeast;
-using ::testing::DoAll;
-using ::testing::Exactly;
-using ::testing::NiceMock;
-using ::testing::Return;
-using ::testing::SetArgPointee;
-using ::testing::SetArrayArgument;
 
 TEST_F( VirtualFlash, BufferRead_PreInitialization )
 {

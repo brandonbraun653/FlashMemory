@@ -1,6 +1,6 @@
 /********************************************************************************
  * File Name:
- *	  test_at45db081_read.cpp
+ *	  test_at45db081_getPageSizeConfig.cpp
  *
  * Description:
  *	  Implements tests for the AT45DB081 driver
@@ -14,24 +14,31 @@
 /* Testing Framework Includes */
 #include <gtest/gtest.h>
 #include <Chimera/spi.hpp>
+#include "test_fixtures_at45db081.hpp"
 
 #if defined( GMOCK_TEST )
 /* Mock Includes */
 #include <Chimera/mock/spi.hpp>
 #include <gmock/gmock.h>
 
-using ::testing::_;
-using ::testing::AtLeast;
-using ::testing::DoAll;
-using ::testing::Exactly;
-using ::testing::NiceMock;
-using ::testing::Return;
-using ::testing::SetArgPointee;
-using ::testing::SetArrayArgument;
+TEST_F( VirtualFlash, GetPageSizeConfig_PreInit )
+{
+  EXPECT_EQ( 0, flash->getPageSizeConfig() );
+}
 
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
-#include "bus_pirate.hpp"
+
+TEST_F( HardwareFlash, GetPageSizeConfig )
+{
+  passInit();
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->useBinaryPageSize() );
+  EXPECT_EQ( Adesto::NORFlash::PAGE_SIZE_BINARY, flash->getPageSizeConfig() );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->useExtendedPageSize() );
+  EXPECT_EQ( Adesto::NORFlash::PAGE_SIZE_EXTENDED, flash->getPageSizeConfig() );
+}
 
 #endif /* HW_TEST */

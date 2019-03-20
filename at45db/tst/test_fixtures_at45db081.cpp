@@ -53,9 +53,7 @@ void VirtualFlash::passInit()
     .WillOnce( DoAll( SetArrayArgument<0>( goodInfo.data(), goodInfo.data() + goodInfo.size() ),
                       Return(Chimera::SPI::Status::OK)))
     .WillOnce( DoAll( SetArrayArgument<0>( goodInfo.data(), goodInfo.data() + goodInfo.size() ),
-                      Return(Chimera::SPI::Status::OK)))
-    .WillOnce( DoAll( SetArrayArgument<0>( statusReg.data(), statusReg.data() + statusReg.size() ),
-                      Return(Chimera::SPI::Status::OK)));;
+                      Return(Chimera::SPI::Status::OK)));
 
   // clang-format on
   /*------------------------------------------------

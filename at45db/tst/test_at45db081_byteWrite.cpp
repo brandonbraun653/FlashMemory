@@ -24,7 +24,7 @@
 TEST_F( VirtualFlash, ByteWrite_PreInit )
 {
   uint8_t someData = 0u;
-  EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED, flash->byteWrite(0, 0, &someData, sizeof( someData ) ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED, flash->byteWrite( 0, 0, &someData, sizeof( someData ) ) );
 }
 
 TEST_F( VirtualFlash, ByteWrite_NullPtrInput )
@@ -37,4 +37,181 @@ TEST_F( VirtualFlash, ByteWrite_NullPtrInput )
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
+using namespace Adesto::NORFlash;
+
+TEST_F( HardwareFlash, ByteWrite_Binary_NullOffset )
+{
+  static constexpr uint8_t len     = 10;
+  static constexpr uint16_t offset = 0;
+  static constexpr uint32_t page   = 80;
+
+  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  /*------------------------------------------------
+  Initialize
+  ------------------------------------------------*/
+  readData.fill( 0 );
+  randomFill( writeData );
+
+  passInit();
+  flash->useBinaryPageSize();
+  ASSERT_EQ( PAGE_SIZE_BINARY, flash->getPageSize() );
+
+  flash->erasePage( page );
+  while ( !flash->isDeviceReady() )
+  {
+    Chimera::delayMilliseconds( 10 );
+  }
+
+  /*------------------------------------------------
+  Call FUT
+  ------------------------------------------------*/
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK,
+             flash->byteWrite( page, offset, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+
+  while ( !flash->isDeviceReady() )
+  {
+    Chimera::delayMilliseconds( 10 );
+  }
+
+  /*------------------------------------------------
+  Verify
+  ------------------------------------------------*/
+  flash->directPageRead( page, offset, readData.data(), len );
+  EXPECT_EQ( 0, memcmp( readData.data(), writeData.data(), len ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->isErasePgmError() );
+}
+
+TEST_F( HardwareFlash, ByteWrite_Binary_PositiveOffset )
+{
+  static constexpr uint8_t len     = 54;
+  static constexpr uint16_t offset = 23;
+  static constexpr uint32_t page   = 82;
+
+  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  /*------------------------------------------------
+  Initialize
+  ------------------------------------------------*/
+  readData.fill( 0 );
+  randomFill( writeData );
+
+  passInit();
+  flash->useBinaryPageSize();
+  ASSERT_EQ( PAGE_SIZE_BINARY, flash->getPageSize() );
+
+  flash->erasePage( page );
+  while ( !flash->isDeviceReady() )
+  {
+    Chimera::delayMilliseconds( 10 );
+  }
+
+  /*------------------------------------------------
+  Call FUT
+  ------------------------------------------------*/
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK,
+             flash->byteWrite( page, offset, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+
+  while ( !flash->isDeviceReady() )
+  {
+    Chimera::delayMilliseconds( 10 );
+  }
+
+  /*------------------------------------------------
+  Verify
+  ------------------------------------------------*/
+  flash->directPageRead( page, offset, readData.data(), len );
+  EXPECT_EQ( 0, memcmp( readData.data(), writeData.data(), len ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->isErasePgmError() );
+}
+
+TEST_F( HardwareFlash, ByteWrite_Extended_NullOffset )
+{
+  static constexpr uint8_t len     = 10;
+  static constexpr uint16_t offset = 0;
+  static constexpr uint32_t page   = 33;
+
+  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  /*------------------------------------------------
+  Initialize
+  ------------------------------------------------*/
+  readData.fill( 0 );
+  randomFill( writeData );
+
+  passInit();
+  flash->useExtendedPageSize();
+  ASSERT_EQ( PAGE_SIZE_EXTENDED, flash->getPageSize() );
+
+  flash->erasePage( page );
+  while ( !flash->isDeviceReady() )
+  {
+    Chimera::delayMilliseconds( 10 );
+  }
+
+  /*------------------------------------------------
+  Call FUT
+  ------------------------------------------------*/
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK,
+             flash->byteWrite( page, offset, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+
+  while ( !flash->isDeviceReady() )
+  {
+    Chimera::delayMilliseconds( 10 );
+  }
+
+  /*------------------------------------------------
+  Verify
+  ------------------------------------------------*/
+  flash->directPageRead( page, offset, readData.data(), len );
+  EXPECT_EQ( 0, memcmp( readData.data(), writeData.data(), len ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->isErasePgmError() );
+}
+
+TEST_F( HardwareFlash, ByteWrite_Extended_PositiveOffset )
+{
+  static constexpr uint8_t len     = 83;
+  static constexpr uint16_t offset = 62;
+  static constexpr uint32_t page   = 94;
+
+  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  /*------------------------------------------------
+  Initialize
+  ------------------------------------------------*/
+  readData.fill( 0 );
+  randomFill( writeData );
+
+  passInit();
+  flash->useExtendedPageSize();
+  ASSERT_EQ( PAGE_SIZE_EXTENDED, flash->getPageSize() );
+
+  flash->erasePage( page );
+  while ( !flash->isDeviceReady() )
+  {
+    Chimera::delayMilliseconds( 10 );
+  }
+
+  /*------------------------------------------------
+  Call FUT
+  ------------------------------------------------*/
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK,
+             flash->byteWrite( page, offset, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+
+  while ( !flash->isDeviceReady() )
+  {
+    Chimera::delayMilliseconds( 10 );
+  }
+
+  /*------------------------------------------------
+  Verify
+  ------------------------------------------------*/
+  flash->directPageRead( page, offset, readData.data(), len );
+  EXPECT_EQ( 0, memcmp( readData.data(), writeData.data(), len ) );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->isErasePgmError() );
+}
 #endif /* HW_TEST */

@@ -43,6 +43,8 @@ namespace Adesto
 
   namespace NORFlash
   {
+    static constexpr uint8_t ERASE_RESET_VAL = 0xFF;
+
     static constexpr uint16_t PAGE_SIZE_BINARY = 256u;
     static constexpr uint32_t BLOCK_SIZE_BINARY = 2048u;
     static constexpr uint32_t SECTOR_SIZE_BINARY = 65536u;

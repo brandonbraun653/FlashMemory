@@ -226,14 +226,33 @@ namespace Adesto
        *	@param[in]	onComplete		Optional function pointer to execute upon task completion
        *	@return Chimera::Status_t
        */
-      Chimera::Status_t readModifyWriteManual( const SRAMBuffer bufferNumber, const uint16_t pageNumber,
-                                               const uint16_t pageOffset, const uint8_t *const dataIn, const uint32_t len,
-                                               Chimera::void_func_uint32_t onComplete = nullptr );
+      Chimera::Status_t readModifyWrite( const SRAMBuffer bufferNumber, const uint16_t pageNumber, const uint16_t pageOffset,
+                                         const uint8_t *const dataIn, const uint32_t len,
+                                         Chimera::void_func_uint32_t onComplete = nullptr );
 
+      /**
+       *  Erases a given page
+       *
+       *  @param[in]  page        The page to be erased
+       *  @return Chimera::Status_t
+       */
+      Chimera::Status_t erasePage( const uint32_t page );
 
-      Chimera::Status_t readModifyWrite( SRAMBuffer bufferNumber, uint16_t pageNumber, uint16_t pageOffset, uint8_t *dataIn,
-                                         uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
+      /**
+       *  Erases a given block
+       *
+       *  @param[in]  block       The block to be erased
+       *  @return Chimera::Status_t
+       */
+      Chimera::Status_t eraseBlock( const uint32_t block );
 
+      /**
+       *  Erases a given sector
+       *
+       *  @param[in]  sector      The sector to be erased
+       *  @return Chimera::Status_t
+       */
+      Chimera::Status_t eraseSector( const uint32_t sector );
 
       /**
        *  Starts the full chip erase process and then returns. Completion must be checked
@@ -321,7 +340,7 @@ namespace Adesto
        *
        *	@return uint32_t
        */
-       uint32_t getSectorSQize();
+       uint32_t getSectorSize();
 
       /*------------------------------------------------
       Block Device Interface Functions
@@ -380,7 +399,7 @@ namespace Adesto
       uint32_t blockSize  = 2112;  /**< Keeps track of the current block size configuration in bytes */
       uint32_t sectorSize = 65472; /**< Keeps track of the current sector size configuration in bytes */
 
-      uint8_t addressBytes;
+      uint8_t addressBytes;                 /**< How many address bytes are used for command invocations */
       std::array<uint8_t, 10> cmdBuffer;    /**< Buffer for holding a command sequence */
       std::array<uint8_t, 3> memoryAddress; /**< Bytes needed for memory addressing. Adesto seems to only use 3.*/
 
@@ -429,29 +448,7 @@ namespace Adesto
        */
       Chimera::Status_t eraseRanges( const MemoryRange range, Chimera::void_func_uint32_t onComplete = nullptr );
 
-      /**
-       *   Erases a given sector
-       *
-       *   @param[in]  sectorNumber    The sector to be erased
-       *   @return void
-       */
-      void eraseSector( const uint32_t sectorNumber );
 
-      /**
-       *   Erases a given block
-       *
-       *   @param[in]  blockNumber     The block to be erased
-       *   @return void
-       */
-      void eraseBlock( const uint32_t blockNumber );
-
-      /**
-       *   Erases a given page
-       *
-       *   @param[in]  pageNumber      The page to be erased
-       *   @return void
-       */
-      void erasePage( const uint32_t pageNumber );
 
       /**
        *   Generates the appropriate command sequence for several read and write operations, automatically

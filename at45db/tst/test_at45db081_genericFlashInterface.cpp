@@ -41,7 +41,32 @@ TEST_F( VirtualFlash, GFI_IsInitialized_PreInit )
   EXPECT_EQ( false, flash->isInitialized() );
 }
 
+TEST_F( VirtualFlash, GFI_IsInitialized_PostInit )
+{
+  passInit();
+  EXPECT_EQ( true, flash->isInitialized() );
+}
+
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
+using namespace Adesto;
+using namespace Adesto::NORFlash;
+
+TEST_F( HardwareFlash, GFI_WriteRead_PageAligned_Single )
+{
+
+}
+
+TEST_F( HardwareFlash, GFI_WriteRead_PageAligned_Multi )
+{
+
+}
+
+TEST_F( HardwareFlash, GFI_WriteRead_PageBoundaryCrossing )
+{
+
+}
+
+
 #endif /* HW_TEST */

@@ -48,6 +48,10 @@ protected:
 #if defined( HW_TEST )
 #include <Chimera/spi.hpp>
 
+#include <random>
+#include <algorithm>
+#include <functional>
+
 using ErrCode = Chimera::Modules::Memory::Status;
 
 class HardwareFlash : public ::testing::Test
@@ -66,6 +70,18 @@ protected:
   void testReset();
 
   void passInit();
+
+  template<typename T, std::size_t L>
+  void randomFill( std::array<T,L> &data )
+  {
+    std::random_device rnd_device;
+    std::mt19937 mersenne_engine{ rnd_device() };
+    std::uniform_int_distribution<T> dist{ std::numeric_limits<T>::min(), std::numeric_limits<T>::max() };
+    auto gen = [&dist, &mersenne_engine]() { return dist( mersenne_engine ); };
+
+    generate( data.begin(), data.end(), gen );
+  }
+
 };
 
 #endif /* HW_TEST */

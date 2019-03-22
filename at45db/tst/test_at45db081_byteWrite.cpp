@@ -45,7 +45,7 @@ TEST_F( HardwareFlash, ByteWrite_Binary_NullOffset )
   static constexpr uint16_t offset = 0;
   static constexpr uint32_t page   = 80;
 
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
   std::array<uint8_t, len> readData;
 
   /*------------------------------------------------
@@ -68,7 +68,7 @@ TEST_F( HardwareFlash, ByteWrite_Binary_NullOffset )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->byteWrite( page, offset, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->byteWrite( page, offset, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -89,7 +89,7 @@ TEST_F( HardwareFlash, ByteWrite_Binary_PositiveOffset )
   static constexpr uint16_t offset = 23;
   static constexpr uint32_t page   = 82;
 
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
   std::array<uint8_t, len> readData;
 
   /*------------------------------------------------
@@ -112,7 +112,7 @@ TEST_F( HardwareFlash, ByteWrite_Binary_PositiveOffset )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->byteWrite( page, offset, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->byteWrite( page, offset, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -133,7 +133,7 @@ TEST_F( HardwareFlash, ByteWrite_Extended_NullOffset )
   static constexpr uint16_t offset = 0;
   static constexpr uint32_t page   = 33;
 
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
   std::array<uint8_t, len> readData;
 
   /*------------------------------------------------
@@ -156,7 +156,7 @@ TEST_F( HardwareFlash, ByteWrite_Extended_NullOffset )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->byteWrite( page, offset, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->byteWrite( page, offset, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -177,7 +177,7 @@ TEST_F( HardwareFlash, ByteWrite_Extended_PositiveOffset )
   static constexpr uint16_t offset = 62;
   static constexpr uint32_t page   = 94;
 
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
   std::array<uint8_t, len> readData;
 
   /*------------------------------------------------
@@ -200,7 +200,7 @@ TEST_F( HardwareFlash, ByteWrite_Extended_PositiveOffset )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->byteWrite( page, offset, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->byteWrite( page, offset, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {

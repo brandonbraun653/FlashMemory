@@ -73,6 +73,8 @@ namespace Adesto
 {
   namespace NORFlash
   {
+    //TODO: You can probably make all these tables constexpr...
+
     /*------------------------------------------------
     Tracks the region sizes of each supported flash chip.
     This MUST be kept in the same order as FlashChip enum.
@@ -329,6 +331,70 @@ namespace Adesto
         SPI_read( dataOut, len, true );
 
         if ( onComplete )
+        {
+          onComplete( 0 );
+        }
+
+        error = ErrCode::OK;
+      }
+
+      return error;
+    }
+
+    Chimera::Status_t AT45::directArrayRead( const uint16_t pageNumber, const uint16_t pageOffset, uint8_t *const dataOut,
+                                             const uint32_t len, Chimera::void_func_uint32_t onComplete )
+    {
+      Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
+
+      if ( !chipInitialized )
+      {
+        error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
+      }
+      else if ( !dataOut )
+      {
+        error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
+      }
+      else
+      {
+        static constexpr uint8_t CONT_ARRAY_READ_CMD_LEN = 4;
+        uint32_t numDummyBytes = 0;
+
+        /*------------------------------------------------
+        The command is comprised of an opcode (1 byte), an address (3 bytes), and X dummy bytes.
+        The dummy bytes are used to initialize the read operation for higher frequencies.
+
+        See: (5.2, 5.3, 5.4, 5.4) Continuous Array Read
+        ------------------------------------------------*/
+        if ( clockFrequency > 50000000 )  // TODO: Remove magic number
+        {
+          cmdBuffer[ 0 ] = CONT_ARR_READ_HF1;
+        }
+        else
+        {
+          cmdBuffer[ 0 ] = CONT_ARR_READ_LF;
+        }
+
+        switch ( cmdBuffer[ 0 ] )
+        {
+          case CONT_ARR_READ_HF1:
+            numDummyBytes = 1;
+            break;
+
+          case CONT_ARR_READ_HF2:
+            numDummyBytes = 2;
+            break;
+
+          default:
+            numDummyBytes = 0;
+            break;
+        }
+
+        buildReadWriteCommand( pageNumber, pageOffset );
+
+        SPI_write( cmdBuffer.data(), CONT_ARRAY_READ_CMD_LEN + numDummyBytes, false );
+        SPI_read( dataOut, len, true );
+
+        if( onComplete )
         {
           onComplete( 0 );
         }
@@ -1017,6 +1083,8 @@ namespace Adesto
       cmdBuffer[ 3 ] = fullAddress & 0x0000FF;
     }
 
+
+
     uint32_t AT45::getSectionFromAddress( const FlashSection section, const uint32_t rawAddress )
     {
       uint32_t sectionNumber = 0;
@@ -1161,129 +1229,147 @@ namespace Adesto
 
     Chimera::Status_t AT45::write( const uint32_t address, const uint8_t *const dataIn, const uint32_t len )
     {
-      return Chimera::CommonStatusCodes::NOT_INITIALIZED;
+      Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
-      /*------------------------------------------------
-      Some Things To Consider:
-
-      1. Is the address in range?
-      2. Is address + len within boundary of device limits?
-      3. Nullptr check
-      4. How many bytes are split among pages?
-          |-----**|*******|*******|*------|
-              ^                       ^
-              |-----------------------|
-                          |
-              These will need to be RMW
-
-         Come to think of it...this could probably be a common function as this is
-         also used by the read and erase capabilities....
-          - Which pages are full write/read/erase
-          - Which pages are partial (and their start and end offsets)
-      ------------------------------------------------*/
-      if ( len )
+      if ( !chipInitialized )
       {
-        uint32_t currentByte = 0;
-        uint32_t writeLen    = 0;
-        MemoryRange range    = getWriteReadPages( address, len );
-
-        /* Handles the first, likely partial page */
-        writeLen = pageSize - range.page.startPageOffset;
-
-        if ( len < writeLen )
-          writeLen = len;
-
-        //readModifyWriteManual( SRAMBuffer::BUFFER1, static_cast<uint16_t>( range.page.start ),
-        //                       static_cast<uint16_t>( range.page.startPageOffset ), dataIn, writeLen );
-
-        while ( !isDeviceReady() )
-        {
-          Chimera::delayMilliseconds( chipDelay[ device ].pageProgramming );
-        }
-        currentByte += writeLen;
-
-        /* Ensure there were no programming errors */
-        if ( isErasePgmError() )
-          return ErrCode::FAILED_WRITE;
-
-        /* Handles intermediate, full pages */
-        for ( auto i = range.page.start + 1; i < range.page.end; i++ )
-        {
-          pageWrite( SRAMBuffer::BUFFER1, 0, static_cast<uint16_t>( i ), ( dataIn + currentByte ), pageSize );
-
-          while ( !isDeviceReady() )
-          {
-            Chimera::delayMilliseconds( chipDelay[ device ].pageProgramming );
-          }
-
-          currentByte += pageSize;
-
-          if ( isErasePgmError() )
-            return ErrCode::FAILED_WRITE;
-        }
-
-        /* Handles the last, likely partial page */
-        if ( ( range.page.start != range.page.end ) && ( range.page.endPageOffset != 0 ) )
-        {
-          //readModifyWriteManual( SRAMBuffer::BUFFER1, static_cast<uint16_t>( range.page.end ), 0, ( dataIn + currentByte ),
-          //                       range.page.endPageOffset );
-
-          while ( !isDeviceReady() )
-          {
-            Chimera::delayMilliseconds( chipDelay[ device ].pageProgramming );
-          }
-
-          if ( isErasePgmError() )
-            return ErrCode::FAILED_WRITE;
-        }
-
-        return ErrCode::OK;
+        error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
       }
+      else if ( !dataIn )
+      {
+        error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
+      }
+      else if ( ( address + len ) >= getFlashCapacity() )
+      {
+        error = ErrCode::OVERRUN;
+      }
+      else
+      {
+        error = Chimera::CommonStatusCodes::OK;
+
+        uint32_t bytesWritten = 0;
+        uint32_t startPage = 0;
+        uint32_t endPage = 0;
+        Chimera::Modules::Memory::MemoryBlockRange dataRange( address, address + len, pageSize );
+
+        dataRange.getConsecutiveBlocks( startPage, endPage );
+        assert( startPage != std::numeric_limits<uint32_t>::max() );
+        assert( endPage != std::numeric_limits<uint32_t>::max() );
+
+        /*------------------------------------------------
+        Write the first partial page (if there is one)
+        ------------------------------------------------*/
+        if( dataRange.startOffset() || ( startPage == endPage ) )
+        {
+          error = readModifyWrite( SRAMBuffer::BUFFER1, dataRange.startBlock(), dataRange.startOffset(), dataIn,
+                                   dataRange.startBytes() );
+
+          /*------------------------------------------------
+          Wait for the chip to be finished with this operation. Thankfully
+          this is a non-blocking operation if the Chimera backend implements
+          the delay mechanism properly.
+          ------------------------------------------------*/
+          while( !isDeviceReady() )
+          {
+            Chimera::delayMilliseconds( chipDelay[ device ].pageEraseAndProgramming );
+          }
+
+          /*------------------------------------------------
+          Check if the readModifyWrite failed or the chip signaled some error
+          ------------------------------------------------*/
+          if ( error == Chimera::CommonStatusCodes::OK && ( isErasePgmError() != Chimera::CommonStatusCodes::OK ) )
+          {
+            error = Chimera::CommonStatusCodes::FAILED_WRITE;
+          }
+          else
+          {
+            bytesWritten += dataRange.startBytes();
+          }
+        }
+
+        /*------------------------------------------------
+        Write consecutive, fully spanned pages next
+        ------------------------------------------------*/
+        if ( error == Chimera::CommonStatusCodes::OK && ( ( startPage < endPage ) || ( (startPage == endPage) && (dataR)) ) )
+        {
+          for ( uint32_t x = startPage; x <= endPage; x++ )
+          {
+            error = pageWrite( SRAMBuffer::BUFFER1, 0, x, dataIn + bytesWritten, pageSize );
+
+            while ( !isDeviceReady() )
+            {
+              Chimera::delayMilliseconds( chipDelay[ device ].pageEraseAndProgramming );
+            }
+
+            if ( error == Chimera::CommonStatusCodes::OK )
+            {
+              bytesWritten += pageSize;
+            }
+            else
+            {
+              break;
+            }
+          }
+        }
+
+        /*------------------------------------------------
+        Write the last partial page (if there is one)
+        ------------------------------------------------*/
+        if ( ( error == Chimera::CommonStatusCodes::OK ) && ( startPage < endPage ) && dataRange.endOffset() )
+        {
+          error = readModifyWrite( SRAMBuffer::BUFFER1, dataRange.endBlock(), 0u, dataIn + bytesWritten,
+                                   dataRange.endOffset() );
+
+          /*------------------------------------------------
+          Wait for the chip to be finished with this operation. Thankfully
+          this is a non-blocking operation if the Chimera backend implements
+          the delay mechanism properly.
+          ------------------------------------------------*/
+          while ( !isDeviceReady() )
+          {
+            Chimera::delayMilliseconds( chipDelay[ device ].pageEraseAndProgramming );
+          }
+
+          /*------------------------------------------------
+          Check if the readModifyWrite failed or the chip signaled some error
+          ------------------------------------------------*/
+          if ( error == Chimera::CommonStatusCodes::OK && ( isErasePgmError() != Chimera::CommonStatusCodes::OK ) )
+          {
+            error = Chimera::CommonStatusCodes::FAILED_WRITE;
+          }
+          else
+          {
+            bytesWritten += dataRange.endOffset();
+          }
+        }
+      }
+
+      return error;
     }
 
-    Chimera::Status_t AT45::read( uint32_t address, uint8_t *dataOut, uint32_t len )
+    Chimera::Status_t AT45::read( const uint32_t address, uint8_t *const dataOut, const uint32_t len )
     {
-      return Chimera::CommonStatusCodes::NOT_INITIALIZED;
+      Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
-
-      if ( len )
+      if ( !chipInitialized )
       {
-        /* Calculate the correct starting page and offset to begin reading from in memory */
-        MemoryRange range   = getWriteReadPages( address, len );
-        uint32_t pageNumber = range.page.start;
-        uint16_t pageOffset = static_cast<uint16_t>( range.page.startPageOffset );
-
-        buildReadWriteCommand( pageNumber, pageOffset );
-
-        /* The command is comprised of an opcode (1 byte), an address (3 bytes), and X dummy bytes.
-         * The dummy bytes are used to initialize the read operation for higher frequencies */
-        uint32_t numDummyBytes = 0;
-
-        if ( clockFrequency > 50000000 )  // 50MHz
-          cmdBuffer[ 0 ] = CONT_ARR_READ_HF1;
-        else
-          cmdBuffer[ 0 ] = CONT_ARR_READ_LF;
-
-        switch ( cmdBuffer[ 0 ] )
-        {
-          case CONT_ARR_READ_HF1:
-            numDummyBytes = 1;
-            break;
-
-          case CONT_ARR_READ_HF2:
-            numDummyBytes = 2;
-            break;
-
-          default:
-            numDummyBytes = 0;
-            break;
-        }
-
-        SPI_write( cmdBuffer.data(), 4 + numDummyBytes, false );
-        SPI_read( dataOut, len, true );
-
-        return ErrCode::OK;
+        error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
       }
+      else if ( !dataOut )
+      {
+        error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
+      }
+      else if ( ( address + len ) >= getFlashCapacity() )
+      {
+        error = ErrCode::OVERRUN;
+      }
+      else
+      {
+        Chimera::Modules::Memory::MemoryBlockRange dataRange( address, address + len, pageSize );
+        error = directArrayRead( dataRange.startBlock(), dataRange.startOffset(), dataOut, len );
+      }
+
+      return error;
     }
 
     Chimera::Status_t AT45::erase( const uint32_t address, const uint32_t len )

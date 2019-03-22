@@ -71,17 +71,17 @@ protected:
 
   void passInit();
 
-  template<typename T, std::size_t L>
-  void randomFill( std::array<T,L> &data )
+  template<std::size_t L>
+  void randomFill( std::array<uint8_t, L> &data )
   {
     std::random_device rnd_device;
     std::mt19937 mersenne_engine{ rnd_device() };
-    std::uniform_int_distribution<T> dist{ std::numeric_limits<T>::min(), std::numeric_limits<T>::max() };
-    auto gen = [&dist, &mersenne_engine]() { return dist( mersenne_engine ); };
+    std::uniform_int_distribution<unsigned short> dist{ std::numeric_limits<uint8_t>::min(),
+                                                        std::numeric_limits<uint8_t>::max() };
+    auto gen = [&dist, &mersenne_engine]() { return static_cast<uint8_t>( dist( mersenne_engine ) ); };
 
     generate( data.begin(), data.end(), gen );
   }
-
 };
 
 #endif /* HW_TEST */

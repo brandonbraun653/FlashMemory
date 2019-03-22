@@ -60,7 +60,7 @@ TEST_F( HardwareFlash, PageWrite_Binary_NullOffset_Buffer1 )
 
   std::array<uint8_t, len> readData;
   std::array<uint8_t, pageSize> pageData;
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
 
   /*------------------------------------------------
   Initialize
@@ -81,7 +81,7 @@ TEST_F( HardwareFlash, PageWrite_Binary_NullOffset_Buffer1 )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->pageWrite( sramBuffer, offset, page, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->pageWrite( sramBuffer, offset, page, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -120,7 +120,7 @@ TEST_F( HardwareFlash, PageWrite_Binary_NullOffset_Buffer2 )
 
   std::array<uint8_t, len> readData;
   std::array<uint8_t, pageSize> pageData;
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
 
   /*------------------------------------------------
   Initialize
@@ -141,7 +141,7 @@ TEST_F( HardwareFlash, PageWrite_Binary_NullOffset_Buffer2 )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->pageWrite( sramBuffer, offset, page, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->pageWrite( sramBuffer, offset, page, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -180,7 +180,7 @@ TEST_F( HardwareFlash, PageWrite_Binary_PositiveOffset_Buffer1 )
 
   std::array<uint8_t, len> readData;
   std::array<uint8_t, pageSize> pageData;
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
 
   /*------------------------------------------------
   Initialize
@@ -201,7 +201,7 @@ TEST_F( HardwareFlash, PageWrite_Binary_PositiveOffset_Buffer1 )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->pageWrite( sramBuffer, offset, page, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->pageWrite( sramBuffer, offset, page, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -240,7 +240,7 @@ TEST_F( HardwareFlash, PageWrite_Binary_PositiveOffset_Buffer2 )
 
   std::array<uint8_t, len> readData;
   std::array<uint8_t, pageSize> pageData;
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
 
   /*------------------------------------------------
   Initialize
@@ -261,7 +261,7 @@ TEST_F( HardwareFlash, PageWrite_Binary_PositiveOffset_Buffer2 )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->pageWrite( sramBuffer, offset, page, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->pageWrite( sramBuffer, offset, page, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -304,7 +304,7 @@ TEST_F( HardwareFlash, PageWrite_Extended_NullOffset_Buffer1 )
 
   std::array<uint8_t, len> readData;
   std::array<uint8_t, pageSize> pageData;
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
 
   /*------------------------------------------------
   Initialize
@@ -325,7 +325,7 @@ TEST_F( HardwareFlash, PageWrite_Extended_NullOffset_Buffer1 )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->pageWrite( sramBuffer, offset, page, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->pageWrite( sramBuffer, offset, page, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -364,7 +364,7 @@ TEST_F( HardwareFlash, PageWrite_Extended_NullOffset_Buffer2 )
 
   std::array<uint8_t, len> readData;
   std::array<uint8_t, pageSize> pageData;
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
 
   /*------------------------------------------------
   Initialize
@@ -385,7 +385,7 @@ TEST_F( HardwareFlash, PageWrite_Extended_NullOffset_Buffer2 )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->pageWrite( sramBuffer, offset, page, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->pageWrite( sramBuffer, offset, page, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -424,7 +424,7 @@ TEST_F( HardwareFlash, PageWrite_Extended_PositiveOffset_Buffer1 )
 
   std::array<uint8_t, len> readData;
   std::array<uint8_t, pageSize> pageData;
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
 
   /*------------------------------------------------
   Initialize
@@ -445,7 +445,7 @@ TEST_F( HardwareFlash, PageWrite_Extended_PositiveOffset_Buffer1 )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->pageWrite( sramBuffer, offset, page, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->pageWrite( sramBuffer, offset, page, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {
@@ -484,7 +484,7 @@ TEST_F( HardwareFlash, PageWrite_Extended_PositiveOffset_Buffer2 )
 
   std::array<uint8_t, len> readData;
   std::array<uint8_t, pageSize> pageData;
-  std::array<unsigned short, len> writeData;
+  std::array<uint8_t, len> writeData;
 
   /*------------------------------------------------
   Initialize
@@ -505,7 +505,7 @@ TEST_F( HardwareFlash, PageWrite_Extended_PositiveOffset_Buffer2 )
   Call FUT
   ------------------------------------------------*/
   EXPECT_EQ( Chimera::CommonStatusCodes::OK,
-             flash->pageWrite( sramBuffer, offset, page, reinterpret_cast<uint8_t *>( writeData.data() ), len ) );
+             flash->pageWrite( sramBuffer, offset, page, writeData.data(), len ) );
 
   while ( !flash->isDeviceReady() )
   {

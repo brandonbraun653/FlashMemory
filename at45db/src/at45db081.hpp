@@ -177,6 +177,24 @@ namespace Adesto
                                         const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
 
       /**
+       *  Reads data directly from internal memory, bypassing both SRAM buffers without modification. This function
+       *  can read the entire chip in one operation, unlike directPageRead() which operates on a single page at a time.
+       *  Crossing the page boundary is no issue.
+       *
+       *  @note   If the end of flash memory is reached before all requested bytes have been clocked out,
+       *	        the data will then wrap around to the beginning of the chip's memory.
+       *
+       *	@param[in]	pageNumber		The page which from which to start reading (not an address)
+       *	@param[in]	pageOffset		The offset within that page to start reading from. Can be any value from 0 to page size.
+       *	@param[out]	dataOut			  External array to hold the data
+       *	@param[in]	len				    Number of bytes to be read
+       *	@param[in]	onComplete		Optional function pointer to execute upon task completion
+       *	@return Chimera::Status_t
+       */
+      Chimera::Status_t directArrayRead( const uint16_t pageNumber, const uint16_t pageOffset, uint8_t *const dataOut,
+                                         const uint32_t len, Chimera::void_func_uint32_t onComplete = nullptr );
+
+      /**
        *  Utilizes SRAM buffer 1 to write a fixed number of bytes to a pre-erased page of memory. Only the
        *  bytes written will be programmed. If the end of the buffer is reached before all bytes are written,
        *  the data will be wrapped around to the beginning of the buffer.
@@ -200,7 +218,7 @@ namespace Adesto
        *  automatically erases and programs a given page address with the contents of the SRAM buffer.
        *
        *	@note	  If only a partial page is written to the SRAM buffer, whatever data is left in SRAM will
-       *          overwrite the full page in memory
+       *          overwrite the full page in memory.
        *
        *	@param[in]	bufferNumber	Selects which SRAM buffer to use
        *	@param[in]	bufferOffset	Selects the first byte in the SRAM buffer to be written

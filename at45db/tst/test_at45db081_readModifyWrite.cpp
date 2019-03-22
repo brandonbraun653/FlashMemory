@@ -59,28 +59,13 @@ TEST_F( HardwareFlash, RMW_Binary_Offset_Buffer1 )
   std::array<uint8_t, pageSize> pageReadData;
   std::array<uint8_t, pageSize> pageExptData;
 
-  std::array<unsigned short, pageSize> randomData1;
-  std::array<unsigned short, pageSize> randomData2;
-
   /*------------------------------------------------
   Initialize
   ------------------------------------------------*/
   readData.fill( 0 );
   pageReadData.fill( 0 );
-
-  /* Generate random data to write to subset of the page */
-  randomFill( randomData1 );
-  for ( uint8_t x = 0; x < len; x++ )
-  {
-    writeData[ x ] = static_cast<uint8_t>( randomData1[ x ] & 0xFF );
-  }
-
-  /* Generate random data to fill the page with */
-  randomFill( randomData2 );
-  for ( uint16_t x = 0; x < pageSize; x++ )
-  {
-    pageFillData[ x ] = static_cast<uint8_t>( randomData2[ x ] & 0xFF );
-  }
+  randomFill( writeData );
+  randomFill( pageFillData );
 
   /* Pre-generate the expected data that should fill the page */
   pageExptData = pageFillData;
@@ -136,28 +121,13 @@ TEST_F( HardwareFlash, RMW_Binary_Offset_Buffer2 )
   std::array<uint8_t, pageSize> pageReadData;
   std::array<uint8_t, pageSize> pageExptData;
 
-  std::array<unsigned short, pageSize> randomData1;
-  std::array<unsigned short, pageSize> randomData2;
-
   /*------------------------------------------------
   Initialize
   ------------------------------------------------*/
   readData.fill( 0 );
   pageReadData.fill( 0 );
-
-  /* Generate random data to write to subset of the page */
-  randomFill( randomData1 );
-  for ( uint8_t x = 0; x < len; x++ )
-  {
-    writeData[ x ] = static_cast<uint8_t>( randomData1[ x ] & 0xFF );
-  }
-
-  /* Generate random data to fill the page with */
-  randomFill( randomData2 );
-  for ( uint16_t x = 0; x < pageSize; x++ )
-  {
-    pageFillData[ x ] = static_cast<uint8_t>( randomData2[ x ] & 0xFF );
-  }
+  randomFill( writeData );
+  randomFill( pageFillData );
 
   /* Pre-generate the expected data that should fill the page */
   pageExptData = pageFillData;
@@ -213,28 +183,13 @@ TEST_F( HardwareFlash, RMW_Extended_Offset_Buffer1 )
   std::array<uint8_t, pageSize> pageReadData;
   std::array<uint8_t, pageSize> pageExptData;
 
-  std::array<unsigned short, pageSize> randomData1;
-  std::array<unsigned short, pageSize> randomData2;
-
   /*------------------------------------------------
   Initialize
   ------------------------------------------------*/
   readData.fill( 0 );
   pageReadData.fill( 0 );
-
-  /* Generate random data to write to subset of the page */
-  randomFill( randomData1 );
-  for ( uint8_t x = 0; x < len; x++ )
-  {
-    writeData[ x ] = static_cast<uint8_t>( randomData1[ x ] & 0xFF );
-  }
-
-  /* Generate random data to fill the page with */
-  randomFill( randomData2 );
-  for ( uint16_t x = 0; x < pageSize; x++ )
-  {
-    pageFillData[ x ] = static_cast<uint8_t>( randomData2[ x ] & 0xFF );
-  }
+  randomFill( writeData );
+  randomFill( pageFillData );
 
   /* Pre-generate the expected data that should fill the page */
   pageExptData = pageFillData;
@@ -290,28 +245,13 @@ TEST_F( HardwareFlash, RMW_Extended_Offset_Buffer2 )
   std::array<uint8_t, pageSize> pageReadData;
   std::array<uint8_t, pageSize> pageExptData;
 
-  std::array<unsigned short, pageSize> randomData1;
-  std::array<unsigned short, pageSize> randomData2;
-
   /*------------------------------------------------
   Initialize
   ------------------------------------------------*/
   readData.fill( 0 );
   pageReadData.fill( 0 );
-
-  /* Generate random data to write to subset of the page */
-  randomFill( randomData1 );
-  for ( uint8_t x = 0; x < len; x++ )
-  {
-    writeData[ x ] = static_cast<uint8_t>( randomData1[ x ] & 0xFF );
-  }
-
-  /* Generate random data to fill the page with */
-  randomFill( randomData2 );
-  for ( uint16_t x = 0; x < pageSize; x++ )
-  {
-    pageFillData[ x ] = static_cast<uint8_t>( randomData2[ x ] & 0xFF );
-  }
+  randomFill( writeData );
+  randomFill( pageFillData );
 
   /* Pre-generate the expected data that should fill the page */
   pageExptData = pageFillData;

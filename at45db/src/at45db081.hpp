@@ -449,24 +449,12 @@ namespace Adesto
       MemoryRange getErasableSections( uint32_t address, uint32_t len );
 
       /**
-       *   Converts an address and length into page numbers and their associated start/end byte offsets
-       *   for easy reading and writing arbitrary locations in memory.
-       *
-       *   @param[in]  address     TODO
-       *   @param[in]  len         TODO
-       *   @return MemoryRange
-       */
-      MemoryRange getWriteReadPages( const uint32_t startAddress, const uint32_t len );
-
-      /**
        *   Erases a set of ranges as defined by a MemoryRange object
        *
        *   @param[in]  range       TODO
        *   @return TODO
        */
       Chimera::Status_t eraseRanges( const MemoryRange range, Chimera::void_func_uint32_t onComplete = nullptr );
-
-
 
       /**
        *   Generates the appropriate command sequence for several read and write operations, automatically

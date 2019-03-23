@@ -822,33 +822,6 @@ namespace Adesto
 
 
 
-    void AT45::SPI_write( const uint8_t *const data, const uint32_t len, const bool disableSS )
-    {
-      writeComplete = false;
-      spi->setChipSelect( Chimera::GPIO::State::LOW );
-      spi->writeBytes( data, len, 10 );
-
-      if ( disableSS )
-      {
-        spi->setChipSelect( Chimera::GPIO::State::HIGH );
-      }
-    }
-
-    void AT45::SPI_read( uint8_t *const data, const uint32_t len, const bool disableSS )
-    {
-      readComplete = false;
-      spi->setChipSelect( Chimera::GPIO::State::LOW );
-      spi->readBytes( data, len, 10 );
-
-      if ( disableSS )
-      {
-        spi->setChipSelect( Chimera::GPIO::State::HIGH );
-      }
-    }
-
-
-
-
 
 
     AT45::MemoryRange AT45::getErasableSections( uint32_t address, uint32_t len )
@@ -885,26 +858,6 @@ namespace Adesto
         range.page.start = getSectionFromAddress( PAGE, address );
         range.page.end   = range.page.start + numPages - 1;
       }
-
-      return range;
-    }
-
-    Adesto::NORFlash::AT45::MemoryRange AT45::getWriteReadPages( const uint32_t startAddress, const uint32_t len )
-    {
-      MemoryRange range;
-      uint32_t endAddress = startAddress + len - 1;
-
-      // Page number that contains the desired starting address
-      range.page.start = getSectionFromAddress( PAGE, startAddress );
-
-      // Address is guaranteed to be >= the section starting address
-      range.page.startPageOffset = startAddress - getSectionStartAddress( PAGE, range.page.start );
-
-      // Page number that we finish in
-      range.page.end = getSectionFromAddress( PAGE, endAddress );
-
-      // Address is guaranteed to be >= the ending section start address
-      range.page.endPageOffset = endAddress - getSectionStartAddress( PAGE, range.page.end );
 
       return range;
     }
@@ -959,8 +912,6 @@ namespace Adesto
 
       return ErrCode::OK;
     }
-
-
 
     void AT45::buildReadWriteCommand( const uint16_t pageNumber, const uint16_t offset )
     {
@@ -1083,8 +1034,6 @@ namespace Adesto
       cmdBuffer[ 3 ] = fullAddress & 0x0000FF;
     }
 
-
-
     uint32_t AT45::getSectionFromAddress( const FlashSection section, const uint32_t rawAddress )
     {
       uint32_t sectionNumber = 0;
@@ -1137,6 +1086,33 @@ namespace Adesto
 
       return address;
     }
+
+    void AT45::SPI_write( const uint8_t *const data, const uint32_t len, const bool disableSS )
+    {
+      writeComplete = false;
+      spi->setChipSelect( Chimera::GPIO::State::LOW );
+      spi->writeBytes( data, len, 10 );
+
+      if ( disableSS )
+      {
+        spi->setChipSelect( Chimera::GPIO::State::HIGH );
+      }
+    }
+
+    void AT45::SPI_read( uint8_t *const data, const uint32_t len, const bool disableSS )
+    {
+      readComplete = false;
+      spi->setChipSelect( Chimera::GPIO::State::LOW );
+      spi->readBytes( data, len, 10 );
+
+      if ( disableSS )
+      {
+        spi->setChipSelect( Chimera::GPIO::State::HIGH );
+      }
+    }
+
+
+
 
     uint32_t AT45::getFlashCapacity()
     {
@@ -1247,22 +1223,21 @@ namespace Adesto
       {
         error = Chimera::CommonStatusCodes::OK;
 
-        uint32_t bytesWritten = 0;
-        uint32_t startPage = 0;
-        uint32_t endPage = 0;
         Chimera::Modules::Memory::MemoryBlockRange dataRange( address, address + len, pageSize );
 
-        dataRange.getConsecutiveBlocks( startPage, endPage );
-        assert( startPage != std::numeric_limits<uint32_t>::max() );
-        assert( endPage != std::numeric_limits<uint32_t>::max() );
+        uint32_t bytesWritten = 0;
+        uint32_t bytesLeft    = len;
+        uint32_t currentBlock = dataRange.startBlock();
+        uint32_t startOffset  = dataRange.startOffset();
+        uint32_t endOffset    = dataRange.endOffset();
 
         /*------------------------------------------------
         Write the first partial page (if there is one)
         ------------------------------------------------*/
-        if( dataRange.startOffset() || ( startPage == endPage ) )
+        if ( startOffset != std::numeric_limits<uint32_t>::max() )
         {
-          error = readModifyWrite( SRAMBuffer::BUFFER1, dataRange.startBlock(), dataRange.startOffset(), dataIn,
-                                   dataRange.startBytes() );
+          const uint32_t partialWriteSize = dataRange.startBytes();
+          error = readModifyWrite( SRAMBuffer::BUFFER1, currentBlock, startOffset, dataIn, partialWriteSize );
 
           /*------------------------------------------------
           Wait for the chip to be finished with this operation. Thankfully
@@ -1277,24 +1252,26 @@ namespace Adesto
           /*------------------------------------------------
           Check if the readModifyWrite failed or the chip signaled some error
           ------------------------------------------------*/
-          if ( error == Chimera::CommonStatusCodes::OK && ( isErasePgmError() != Chimera::CommonStatusCodes::OK ) )
+          if ( ( error != Chimera::CommonStatusCodes::OK ) || ( isErasePgmError() != Chimera::CommonStatusCodes::OK ) )
           {
             error = Chimera::CommonStatusCodes::FAILED_WRITE;
           }
           else
           {
-            bytesWritten += dataRange.startBytes();
+            bytesLeft    -= partialWriteSize;
+            bytesWritten += partialWriteSize;
+            currentBlock += 1u;
           }
         }
 
         /*------------------------------------------------
         Write consecutive, fully spanned pages next
         ------------------------------------------------*/
-        if ( error == Chimera::CommonStatusCodes::OK && ( ( startPage < endPage ) || ( (startPage == endPage) && (dataR)) ) )
+        if ( error == Chimera::CommonStatusCodes::OK )
         {
-          for ( uint32_t x = startPage; x <= endPage; x++ )
+          while( bytesLeft >= pageSize )
           {
-            error = pageWrite( SRAMBuffer::BUFFER1, 0, x, dataIn + bytesWritten, pageSize );
+            error = pageWrite( SRAMBuffer::BUFFER1, 0, currentBlock, dataIn + bytesWritten, pageSize );
 
             while ( !isDeviceReady() )
             {
@@ -1303,7 +1280,9 @@ namespace Adesto
 
             if ( error == Chimera::CommonStatusCodes::OK )
             {
+              bytesLeft    -= pageSize;
               bytesWritten += pageSize;
+              currentBlock += 1u;
             }
             else
             {
@@ -1315,10 +1294,9 @@ namespace Adesto
         /*------------------------------------------------
         Write the last partial page (if there is one)
         ------------------------------------------------*/
-        if ( ( error == Chimera::CommonStatusCodes::OK ) && ( startPage < endPage ) && dataRange.endOffset() )
+        if ( ( error == Chimera::CommonStatusCodes::OK ) && bytesLeft && ( endOffset != std::numeric_limits<uint32_t>::max() ) )
         {
-          error = readModifyWrite( SRAMBuffer::BUFFER1, dataRange.endBlock(), 0u, dataIn + bytesWritten,
-                                   dataRange.endOffset() );
+          error = readModifyWrite( SRAMBuffer::BUFFER1, currentBlock, 0u, dataIn + bytesWritten, endOffset );
 
           /*------------------------------------------------
           Wait for the chip to be finished with this operation. Thankfully
@@ -1333,13 +1311,9 @@ namespace Adesto
           /*------------------------------------------------
           Check if the readModifyWrite failed or the chip signaled some error
           ------------------------------------------------*/
-          if ( error == Chimera::CommonStatusCodes::OK && ( isErasePgmError() != Chimera::CommonStatusCodes::OK ) )
+          if ( ( error != Chimera::CommonStatusCodes::OK ) || ( isErasePgmError() != Chimera::CommonStatusCodes::OK ) )
           {
             error = Chimera::CommonStatusCodes::FAILED_WRITE;
-          }
-          else
-          {
-            bytesWritten += dataRange.endOffset();
           }
         }
       }
@@ -1374,17 +1348,28 @@ namespace Adesto
 
     Chimera::Status_t AT45::erase( const uint32_t address, const uint32_t len )
     {
-      return Chimera::CommonStatusCodes::NOT_INITIALIZED;
+      Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
-
-      if ( len )
+      if ( !chipInitialized )
       {
-        /* Erase functionality is forced to be page aligned at a minimum */
-        if ( ( address % pageSize ) || ( len % pageSize ) )
-          return ErrCode::NOT_PAGE_ALIGNED;
-
-        return eraseRanges( getErasableSections( address, len ) );
+        error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
       }
+      else if ( ( address + len ) >= getFlashCapacity() )
+      {
+        error = ErrCode::OVERRUN;
+      }
+      else
+      {
+        //Work down from the largest possible sizing down to the smallest. Then do that whole read/modify/write thing for
+        //the leading and trailing pages.
+
+        // Holy crap I think previous me already built the utility functions to calculate this...
+        // I just need to copy out the lead/trail pages.
+
+        error = Chimera::CommonStatusCodes::OK;
+      }
+
+      return error;
     }
 
     Chimera::Status_t AT45::writeCompleteCallback( const Chimera::void_func_uint32_t func )

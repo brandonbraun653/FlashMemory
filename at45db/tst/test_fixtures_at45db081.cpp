@@ -32,10 +32,10 @@ void VirtualFlash::TearDown()
 
 void VirtualFlash::passInit()
 {
-  Adesto::FlashChip chip = Adesto::FlashChip::AT45DB081E;
+  Adesto::NORFlash::FlashChip chip = Adesto::NORFlash::FlashChip::AT45DB081E;
 
   uint8_t msk = 0xFF;
-  uint16_t sr = Adesto::NORFlash::StatusRegisterBitPos::PAGE_SIZE_CONFIG_Pos;
+  uint16_t sr = Adesto::NORFlash::PAGE_SIZE_CONFIG_Pos;
 
   std::array<uint8_t, 3> goodInfo  = { 0x1F, 0x25, 0x00 };
   std::array<uint8_t, 2> statusReg = { static_cast<uint8_t>( ( sr >> 8 ) & msk ), static_cast<uint8_t>( sr & msk ) };
@@ -92,7 +92,7 @@ void HardwareFlash::testReset()
 
 void HardwareFlash::passInit()
 {
-  ASSERT_EQ( ErrCode::OK, flash->init( Adesto::AT45DB081E ) );
+  ASSERT_EQ( ErrCode::OK, flash->init( Adesto::NORFlash::FlashChip::AT45DB081E ) );
   ASSERT_EQ( true, flash->isInitialized() );
 
   Chimera::delayMilliseconds( 100 );

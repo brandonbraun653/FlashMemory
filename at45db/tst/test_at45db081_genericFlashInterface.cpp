@@ -32,11 +32,13 @@ TEST_F( VirtualFlash, GFI_Write_PreInit )
 
 TEST_F( VirtualFlash, GFI_Write_NullPtr )
 {
+  passInit();
   EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM, flash->write( 0, nullptr, 55 ) );
 }
 
 TEST_F( VirtualFlash, GFI_Write_TooMuchData )
 {
+  passInit();
   uint8_t data = 44;
   EXPECT_EQ( Chimera::Modules::Memory::Status::OVERRUN, flash->write( 0, &data, std::numeric_limits<uint32_t>::max() ) );
 }
@@ -52,11 +54,13 @@ TEST_F( VirtualFlash, GFI_Read_PreInit )
 
 TEST_F( VirtualFlash, GFI_Read_NullPtr )
 {
+  passInit();
   EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM, flash->read( 0, nullptr, 55 ) );
 }
 
 TEST_F( VirtualFlash, GFI_Read_TooMuchData )
 {
+  passInit();
   uint8_t data = 44;
   EXPECT_EQ( Chimera::Modules::Memory::Status::OVERRUN, flash->read( 0, &data, std::numeric_limits<uint32_t>::max() ) );
 }
@@ -71,8 +75,16 @@ TEST_F( VirtualFlash, GFI_Erase_PreInit )
 
 TEST_F( VirtualFlash, GFI_Erase_RangeTooLarge )
 {
-  EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED, flash->erase( 0, std::numeric_limits<uint32_t>::max() ) );
+  passInit();
+  EXPECT_EQ( Chimera::Modules::Memory::Status::OVERRUN, flash->erase( 0, std::numeric_limits<uint32_t>::max() ) );
 }
+
+TEST_F( VirtualFlash, GFI_Erase_Unaligned )
+{
+  passInit();
+  EXPECT_EQ( Chimera::Modules::Memory::Status::UNALIGNED_MEM, flash->erase( 3, 3 ) );
+}
+
 
 /*------------------------------------------------
 Initialization Status
@@ -100,9 +112,99 @@ Binary Page Size
 
 TEST_F( HardwareFlash, GFI_Erase_Binary_SinglePage )
 {
+  static constexpr uint32_t page       = 35;
+  static constexpr uint32_t pageSize   = PAGE_SIZE_BINARY;
+  static constexpr uint32_t address    = page * pageSize;
+  static constexpr uint32_t len        = pageSize;
 
+  std::array<uint8_t, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  randomFill( writeData );
+  readData.fill( 0 );
+
+  passInit();
+  flash->useBinaryPageSize();
+  ASSERT_EQ( pageSize, flash->getPageSize() );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->write( address, writeData.data(), len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->erase( address, len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->read( address, readData.data(), len ) );
+  EXPECT_EQ( true, std::all_of( readData.begin(), readData.end(), [](const uint8_t i) { return i == ERASE_RESET_VAL; } ) );
 }
 
+TEST_F( HardwareFlash, GFI_Erase_Binary_MultiPage )
+{
+  static constexpr uint32_t page     = 547;
+  static constexpr uint32_t pageSize = PAGE_SIZE_BINARY;
+  static constexpr uint32_t address  = page * pageSize;
+  static constexpr uint32_t len      = 7 * pageSize;
+
+  std::array<uint8_t, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  randomFill( writeData );
+  readData.fill( 0 );
+
+  passInit();
+  flash->useBinaryPageSize();
+  ASSERT_EQ( pageSize, flash->getPageSize() );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->write( address, writeData.data(), len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->erase( address, len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->read( address, readData.data(), len ) );
+  EXPECT_EQ( true, std::all_of( readData.begin(), readData.end(), []( const uint8_t i ) { return i == ERASE_RESET_VAL; } ) );
+}
+
+TEST_F( HardwareFlash, GFI_Erase_Binary_MultiBlock )
+{
+  static constexpr uint32_t page     = 303;
+  static constexpr uint32_t pageSize = PAGE_SIZE_BINARY;
+  static constexpr uint32_t address  = page * pageSize;
+  static constexpr uint32_t len      = 18 * pageSize;
+
+  std::array<uint8_t, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  randomFill( writeData );
+  readData.fill( 0 );
+
+  passInit();
+  flash->useBinaryPageSize();
+  ASSERT_EQ( pageSize, flash->getPageSize() );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->write( address, writeData.data(), len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->erase( address, len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->read( address, readData.data(), len ) );
+  EXPECT_EQ( true, std::all_of( readData.begin(), readData.end(), []( const uint8_t i ) { return i == ERASE_RESET_VAL; } ) );
+}
+
+TEST_F( HardwareFlash, GFI_Erase_Binary_MultiSector )
+{
+  static constexpr uint32_t page     = 102;
+  static constexpr uint32_t pageSize = PAGE_SIZE_BINARY;
+  static constexpr uint32_t address  = page * pageSize;
+  static constexpr uint32_t len      = 3 * 256 * pageSize;
+
+  std::array<uint8_t, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  randomFill( writeData );
+  readData.fill( 0 );
+
+  passInit();
+  flash->useBinaryPageSize();
+  ASSERT_EQ( pageSize, flash->getPageSize() );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->write( address, writeData.data(), len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->erase( address, len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->read( address, readData.data(), len ) );
+  EXPECT_EQ( true, std::all_of( readData.begin(), readData.end(), []( const uint8_t i ) { return i == ERASE_RESET_VAL; } ) );
+}
 
 /**
  *  Data Range: ***
@@ -307,6 +409,102 @@ TEST_F( HardwareFlash, GFI_WriteRead_Binary_OffsetMultiPageSpan )
 /*------------------------------------------------
 Extended Page Size
 ------------------------------------------------*/
+
+TEST_F( HardwareFlash, GFI_Erase_Extended_SinglePage )
+{
+  static constexpr uint32_t page     = 63;
+  static constexpr uint32_t pageSize = PAGE_SIZE_EXTENDED;
+  static constexpr uint32_t address  = page * pageSize;
+  static constexpr uint32_t len      = pageSize;
+
+  std::array<uint8_t, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  randomFill( writeData );
+  readData.fill( 0 );
+
+  passInit();
+  flash->useExtendedPageSize();
+  ASSERT_EQ( pageSize, flash->getPageSize() );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->write( address, writeData.data(), len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->erase( address, len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->read( address, readData.data(), len ) );
+  EXPECT_EQ( true, std::all_of( readData.begin(), readData.end(), []( const uint8_t i ) { return i == ERASE_RESET_VAL; } ) );
+}
+
+TEST_F( HardwareFlash, GFI_Erase_Extended_MultiPage )
+{
+  static constexpr uint32_t page     = 605;
+  static constexpr uint32_t pageSize = PAGE_SIZE_EXTENDED;
+  static constexpr uint32_t address  = page * pageSize;
+  static constexpr uint32_t len      = 7 * pageSize;
+
+  std::array<uint8_t, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  randomFill( writeData );
+  readData.fill( 0 );
+
+  passInit();
+  flash->useExtendedPageSize();
+  ASSERT_EQ( pageSize, flash->getPageSize() );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->write( address, writeData.data(), len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->erase( address, len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->read( address, readData.data(), len ) );
+  EXPECT_EQ( true, std::all_of( readData.begin(), readData.end(), []( const uint8_t i ) { return i == ERASE_RESET_VAL; } ) );
+}
+
+TEST_F( HardwareFlash, GFI_Erase_Extended_MultiBlock )
+{
+  static constexpr uint32_t page     = 847;
+  static constexpr uint32_t pageSize = PAGE_SIZE_EXTENDED;
+  static constexpr uint32_t address  = page * pageSize;
+  static constexpr uint32_t len      = 18 * pageSize;
+
+  std::array<uint8_t, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  randomFill( writeData );
+  readData.fill( 0 );
+
+  passInit();
+  flash->useExtendedPageSize();
+  ASSERT_EQ( pageSize, flash->getPageSize() );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->write( address, writeData.data(), len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->erase( address, len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->read( address, readData.data(), len ) );
+  EXPECT_EQ( true, std::all_of( readData.begin(), readData.end(), []( const uint8_t i ) { return i == ERASE_RESET_VAL; } ) );
+}
+
+TEST_F( HardwareFlash, GFI_Erase_Extended_MultiSector )
+{
+  static constexpr uint32_t page     = 202;
+  static constexpr uint32_t pageSize = PAGE_SIZE_EXTENDED;
+  static constexpr uint32_t address  = page * pageSize;
+  static constexpr uint32_t len      = 3 * 256 * pageSize;
+
+  std::array<uint8_t, len> writeData;
+  std::array<uint8_t, len> readData;
+
+  randomFill( writeData );
+  readData.fill( 0 );
+
+  passInit();
+  flash->useExtendedPageSize();
+  ASSERT_EQ( pageSize, flash->getPageSize() );
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->write( address, writeData.data(), len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->erase( address, len ) );
+
+  EXPECT_EQ( Chimera::CommonStatusCodes::OK, flash->read( address, readData.data(), len ) );
+  EXPECT_EQ( true, std::all_of( readData.begin(), readData.end(), []( const uint8_t i ) { return i == ERASE_RESET_VAL; } ) );
+}
 
 /**
  *  Data Range: ***

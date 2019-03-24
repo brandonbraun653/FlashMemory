@@ -25,7 +25,7 @@ TEST_F( VirtualFlash, BufferRead_PreInitialization )
 {
   uint8_t someData[] = { 1, 2, 3, 4 };
   EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED,
-             flash->sramRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, someData, 0xFFFF ) );
+             flash->sramRead( Adesto::NORFlash::SRAMBuffer::BUFFER1, 0xFFFF, someData, 0xFFFF ) );
 }
 
 TEST_F( VirtualFlash, BufferRead_NullPointerInput )
@@ -33,10 +33,10 @@ TEST_F( VirtualFlash, BufferRead_NullPointerInput )
   passInit();
 
   EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM,
-             flash->sramRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, nullptr, 0xFFFF ) );
+             flash->sramRead( Adesto::NORFlash::SRAMBuffer::BUFFER1, 0xFFFF, nullptr, 0xFFFF ) );
 
   EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM,
-             flash->sramRead( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, NULL, 0xFFFF ) );
+             flash->sramRead( Adesto::NORFlash::SRAMBuffer::BUFFER1, 0xFFFF, NULL, 0xFFFF ) );
 }
 
 #endif /* GMOCK_TEST */

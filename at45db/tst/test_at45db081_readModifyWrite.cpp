@@ -24,7 +24,7 @@
 TEST_F( VirtualFlash, ReadModifyWrite_PreInit )
 {
   EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED,
-             flash->readModifyWrite( Adesto::SRAMBuffer::BUFFER1, 0, 0, nullptr, 0 ) );
+             flash->readModifyWrite( Adesto::NORFlash::SRAMBuffer::BUFFER1, 0, 0, nullptr, 0 ) );
 }
 
 TEST_F( VirtualFlash, ReadModifyWrite_Nullptr )
@@ -32,16 +32,15 @@ TEST_F( VirtualFlash, ReadModifyWrite_Nullptr )
   passInit();
 
   EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM,
-             flash->readModifyWrite( Adesto::SRAMBuffer::BUFFER1, 0, 0, nullptr, 0 ) );
+             flash->readModifyWrite( Adesto::NORFlash::SRAMBuffer::BUFFER1, 0, 0, nullptr, 0 ) );
 
   EXPECT_EQ( Chimera::CommonStatusCodes::INVAL_FUNC_PARAM,
-             flash->readModifyWrite( Adesto::SRAMBuffer::BUFFER2, 0, 0, nullptr, 0 ) );
+             flash->readModifyWrite( Adesto::NORFlash::SRAMBuffer::BUFFER2, 0, 0, nullptr, 0 ) );
 }
 
 #endif /* GMOCK_TEST */
 
 #if defined( HW_TEST )
-using namespace Adesto;
 using namespace Adesto::NORFlash;
 
 TEST_F( HardwareFlash, RMW_Binary_Offset_Buffer1 )

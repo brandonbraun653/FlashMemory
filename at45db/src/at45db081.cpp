@@ -11,31 +11,14 @@
 /* C/C++ Includes */
 #include <memory>
 
-/* Chimera Includes */
-#include <Chimera/logging.hpp>
-#include <Chimera/utilities.hpp>
-
 /* Driver Includes */
 #include "at45db081.hpp"
 
 using namespace Chimera::SPI;
-using namespace Chimera::Logging;
 using namespace Chimera::Modules::Memory;
-
 using ErrCode = Chimera::Modules::Memory::Status;
 
 #define BYTE_LEN( x ) ( sizeof( x ) / sizeof( uint8_t ) )
-static constexpr uint16_t STANDARD_PAGE_SIZE    = 264;
-static constexpr uint16_t BINARY_PAGE_SIZE      = 256;
-static constexpr uint8_t ADDRESS_OVERRUN        = ( 1u << 0 );
-static constexpr uint8_t INVALID_SECTION_NUMBER = ( 1u << 1 );
-
-struct FlashSizes
-{
-  uint32_t numSectors = 0;
-  uint32_t numBlocks  = 0;
-  uint32_t numPages   = 0;
-};
 
 struct AddressDescriptions
 {
@@ -69,21 +52,26 @@ struct FlashDelay
   uint16_t chipErase;
 };
 
+struct FlashSizes
+{
+  uint32_t numSectors = 0;
+  uint32_t numBlocks  = 0;
+  uint32_t numPages   = 0;
+};
+
 namespace Adesto
 {
   namespace NORFlash
   {
-    //TODO: You can probably make all these tables constexpr...
-
     /*------------------------------------------------
     Tracks the region sizes of each supported flash chip.
     This MUST be kept in the same order as FlashChip enum.
     ------------------------------------------------*/
-    static const FlashSizes chipSpecs[ NUM_SUPPORTED_CHIPS ] = {
-      { 16, 512, 4096 },  /* AT45DB081E */
+    static constexpr FlashSizes chipSpecs[ static_cast<uint8_t>( FlashChip::NUM_SUPPORTED_CHIPS ) ] = {
+      { 16, 512, 4096 }, /* AT45DB081E */
     };
 
-    static const MemoryAddressFormat addressFormat[ NUM_SUPPORTED_CHIPS ] = {
+    static constexpr MemoryAddressFormat addressFormat[ static_cast<uint8_t>( FlashChip::NUM_SUPPORTED_CHIPS ) ] = {
       // AT45DB081E: See datasheet pgs. 13-14
       {
           { { 3, 12, 9 }, { 4, 12, 8 } },  // Page
@@ -94,7 +82,7 @@ namespace Adesto
       },
     };
 
-    static const FlashDelay chipDelay[ NUM_SUPPORTED_CHIPS ] = {
+    static constexpr FlashDelay chipDelay[ static_cast<uint8_t>( FlashChip::NUM_SUPPORTED_CHIPS ) ] = {
       // AT45DB081E: See datasheet pg.49
       {
           15,    // Page erase and programming
@@ -106,14 +94,12 @@ namespace Adesto
       },
     };
 
-    Chimera::Status_t AT45::init( const FlashChip chip )
+    Chimera::Status_t AT45::init( const FlashChip chip, const uint32_t clockFreq )
     {
-      uint32_t userClockFreq       = 1000000;
       Chimera::Status_t initResult = Chimera::CommonStatusCodes::FAIL;
 
       device = chip;
       cmdBuffer.fill( 0 );
-      addressBytes = addressFormat[ device ].numAddressBytes;
 
       /*------------------------------------------------
       Initialize the SPI device with the correct parameters
@@ -153,7 +139,7 @@ namespace Adesto
         }
         else
         {
-          spi->setClockFrequency( userClockFreq, 0 );
+          spi->setClockFrequency( clockFreq, 0 );
           getDeviceInfo( hiFreqInfo );
 
           if ( memcmp( &loFreqInfo, &hiFreqInfo, sizeof( AT45xx_DeviceInfo ) ) != 0 )
@@ -162,8 +148,9 @@ namespace Adesto
           }
           else
           {
-            chipInfo   = hiFreqInfo;
-            initResult = useBinaryPageSize();
+            chipInfo       = hiFreqInfo;
+            initResult     = useBinaryPageSize();
+            clockFrequency = clockFreq;
           }
         }
       }
@@ -357,7 +344,7 @@ namespace Adesto
       else
       {
         static constexpr uint8_t CONT_ARRAY_READ_CMD_LEN = 4;
-        uint32_t numDummyBytes = 0;
+        uint32_t numDummyBytes                           = 0;
 
         /*------------------------------------------------
         The command is comprised of an opcode (1 byte), an address (3 bytes), and X dummy bytes.
@@ -394,7 +381,7 @@ namespace Adesto
         SPI_write( cmdBuffer.data(), CONT_ARRAY_READ_CMD_LEN + numDummyBytes, false );
         SPI_read( dataOut, len, true );
 
-        if( onComplete )
+        if ( onComplete )
         {
           onComplete( 0 );
         }
@@ -414,7 +401,7 @@ namespace Adesto
       {
         error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
       }
-      else if( !dataIn )
+      else if ( !dataIn )
       {
         error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
       }
@@ -445,8 +432,7 @@ namespace Adesto
     }
 
     Chimera::Status_t AT45::pageWrite( const SRAMBuffer bufferNumber, const uint16_t bufferOffset, const uint16_t pageNumber,
-                                       const uint8_t *const dataIn, const uint32_t len,
-                                       Chimera::void_func_uint32_t onComplete )
+                                       const uint8_t *const dataIn, const uint32_t len, Chimera::void_func_uint32_t onComplete )
     {
       Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
@@ -529,20 +515,21 @@ namespace Adesto
     {
       Chimera::Status_t error = Chimera::CommonStatusCodes::FAIL;
 
-      if( !chipInitialized )
+      if ( !chipInitialized )
       {
         error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
       }
-      else if( page >= chipSpecs[device].numPages )
+      else if ( page >= chipSpecs[ static_cast<uint8_t>( device ) ].numPages )
       {
         error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
       }
       else
       {
         cmdBuffer[ 0 ] = PAGE_ERASE;
-        buildEraseCommand( PAGE, page );
+        buildEraseCommand( Section_t::PAGE, page );
 
-        SPI_write( cmdBuffer.data(), ( BYTE_LEN( PAGE_ERASE ) + addressBytes ), true );
+        SPI_write( cmdBuffer.data(),
+                   ( BYTE_LEN( PAGE_ERASE ) + addressFormat[ static_cast<uint8_t>( device ) ].numAddressBytes ), true );
         error = Chimera::CommonStatusCodes::OK;
       }
 
@@ -557,16 +544,17 @@ namespace Adesto
       {
         error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
       }
-      else if ( block >= chipSpecs[ device ].numBlocks )
+      else if ( block >= chipSpecs[ static_cast<uint8_t>( device ) ].numBlocks )
       {
         error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
       }
       else
       {
         cmdBuffer[ 0 ] = BLOCK_ERASE;
-        buildEraseCommand( BLOCK, block );
+        buildEraseCommand( Section_t::BLOCK, block );
 
-        SPI_write( cmdBuffer.data(), ( BYTE_LEN( BLOCK_ERASE ) + addressBytes ), true );
+        SPI_write( cmdBuffer.data(),
+                   ( BYTE_LEN( BLOCK_ERASE ) + addressFormat[ static_cast<uint8_t>( device ) ].numAddressBytes ), true );
         error = Chimera::CommonStatusCodes::OK;
       }
 
@@ -581,16 +569,17 @@ namespace Adesto
       {
         error = Chimera::CommonStatusCodes::NOT_INITIALIZED;
       }
-      else if ( sector >= chipSpecs[ device ].numSectors )
+      else if ( sector >= chipSpecs[ static_cast<uint8_t>( device ) ].numSectors )
       {
         error = Chimera::CommonStatusCodes::INVAL_FUNC_PARAM;
       }
       else
       {
         cmdBuffer[ 0 ] = SECTOR_ERASE;
-        buildEraseCommand( SECTOR, sector );
+        buildEraseCommand( Section_t::SECTOR, sector );
 
-        SPI_write( cmdBuffer.data(), ( BYTE_LEN( SECTOR_ERASE ) + addressBytes ), true );
+        SPI_write( cmdBuffer.data(),
+                   ( BYTE_LEN( SECTOR_ERASE ) + addressFormat[ static_cast<uint8_t>( device ) ].numAddressBytes ), true );
         error = Chimera::CommonStatusCodes::OK;
       }
 
@@ -820,300 +809,6 @@ namespace Adesto
       return error;
     }
 
-
-
-
-
-    AT45::MemoryRange AT45::getErasableSections( uint32_t address, uint32_t len )
-    {
-      MemoryRange range;
-
-      /* Break the address range down into erasable modules */
-      if ( len >= sectorSize )
-      {
-        auto numSectors = len / sectorSize;
-
-        range.sector.start = getSectionFromAddress( SECTOR, address );
-        range.sector.end   = range.sector.start + numSectors - 1;
-
-        len -= sectorSize * numSectors;
-        address += sectorSize * numSectors;
-      }
-
-      if ( len >= blockSize )
-      {
-        auto numBlocks = len / blockSize;
-
-        range.block.start = getSectionFromAddress( BLOCK, address );
-        range.block.end   = range.block.start + numBlocks - 1;
-
-        len -= blockSize * numBlocks;
-        address += blockSize * numBlocks;
-      }
-
-      if ( len >= pageSize )
-      {
-        auto numPages = len / pageSize;
-
-        range.page.start = getSectionFromAddress( PAGE, address );
-        range.page.end   = range.page.start + numPages - 1;
-      }
-
-      return range;
-    }
-
-    Chimera::Status_t AT45::eraseRanges( const MemoryRange range, Chimera::void_func_uint32_t onComplete /*= nullptr*/ )
-    {
-      // SECTOR ERASE
-      for ( auto i = range.sector.start; i < range.sector.end + 1; i++ )
-      {
-        eraseSector( i );
-
-        while ( !isDeviceReady() )
-        {
-          // Delay the average time for a sector erase as specified by the datasheet
-          Chimera::delayMilliseconds( chipDelay[ device ].sectorErase );
-        }
-
-        if ( isErasePgmError() )
-          return ErrCode::FAILED_ERASE;
-      }
-
-      // BLOCK ERASE
-      for ( auto i = range.block.start; i < range.block.end + 1; i++ )
-      {
-        eraseBlock( i );
-
-        while ( !isDeviceReady() )
-        {
-          Chimera::delayMilliseconds( chipDelay[ device ].blockErase );
-        }
-
-        if ( isErasePgmError() )
-          return ErrCode::FAILED_ERASE;
-      }
-
-      // PAGE ERASE
-      for ( auto i = range.page.start; i < range.page.end + 1; i++ )
-      {
-        eraseBlock( i );
-
-        while ( !isDeviceReady() )
-        {
-          Chimera::delayMilliseconds( chipDelay[ device ].pageErase );
-        }
-
-        if ( isErasePgmError() )
-          return ErrCode::FAILED_ERASE;
-      }
-
-      if ( onComplete )
-        onComplete( 0 );
-
-      return ErrCode::OK;
-    }
-
-    void AT45::buildReadWriteCommand( const uint16_t pageNumber, const uint16_t offset )
-    {
-      /*------------------------------------------------
-      Grab the correct page configuration size. This informs the code
-      how much bit shifting to apply when building the command.
-      ------------------------------------------------*/
-      const AddressDescriptions *config;
-      if ( pageSize == STANDARD_PAGE_SIZE )
-      {
-        config = &addressFormat[ device ].page.standardSize;
-      }
-      else
-      {
-        config = &addressFormat[ device ].page.binarySize;
-      }
-
-      /*------------------------------------------------
-      Generate masks of the correct bit width to clean up the input variables
-      ------------------------------------------------*/
-      uint32_t addressBitMask = ( 1u << config->addressBits ) - 1u;
-      uint32_t offsetBitMask  = ( 1u << config->dummyBitsLSB ) - 1u;
-
-      /*------------------------------------------------
-       The full address is really only 3 bytes wide. They are set up as
-       follows, with 'a' == address bit, 'o' == offset bit and 'x' == don't care.
-       This is the exact order in which it must be transmitted. (ie MSB first)
-
-                               Byte 1 | Byte 2 | Byte 3
-      For 264 byte page size: xxxaaaaa|aaaaaaao|oooooooo
-      For 256 byte page size: xxxxaaaa|aaaaaaaa|oooooooo
-      ------------------------------------------------*/
-      uint32_t fullAddress = ( ( pageNumber & addressBitMask ) << config->dummyBitsLSB ) | ( offsetBitMask & offset );
-
-      /*------------------------------------------------
-      Note: Cannot use memcpy because it reverses the byte order expected by the flash chip.
-      For example, if the value of 'fullAddress' were 0xAABBCC, the memcpy would put the values into the cmdBuffer as
-       *0xCCBBAA. This is correct as far as the MCU is concerned, but the flash chip needs the data exactly as calculated:
-       *0xAABBCC
-      ------------------------------------------------*/
-      cmdBuffer[ 1 ] = ( fullAddress & 0xFF0000 ) >> 16;
-      cmdBuffer[ 2 ] = ( fullAddress & 0x00FF00 ) >> 8;
-      cmdBuffer[ 3 ] = ( fullAddress & 0x0000FF );
-    }
-
-    void AT45::buildEraseCommand( const FlashSection section, const uint32_t sectionNumber )
-    {
-      uint32_t fullAddress              = 0u;
-      const AddressDescriptions *config = nullptr;
-
-      switch ( section )
-      {
-        case PAGE:
-          if ( pageSize == STANDARD_PAGE_SIZE )
-            config = &addressFormat[ device ].page.standardSize;
-          else
-            config = &addressFormat[ device ].page.binarySize;
-
-          // Indicate that an incorrect address will be generated below
-          if ( sectionNumber >= chipSpecs[ device ].numPages )
-            errorFlags |= ADDRESS_OVERRUN;
-          break;
-
-        case BLOCK:
-          if ( pageSize == STANDARD_PAGE_SIZE )
-            config = &addressFormat[ device ].block.standardSize;
-          else
-            config = &addressFormat[ device ].block.binarySize;
-
-          if ( sectionNumber >= chipSpecs[ device ].numBlocks )
-            errorFlags |= ADDRESS_OVERRUN;
-          break;
-
-        case SECTOR:
-          if ( sectionNumber == 0 )
-          {
-            if ( pageSize == STANDARD_PAGE_SIZE )
-              config = &addressFormat[ device ].sector0ab.standardSize;
-            else
-              config = &addressFormat[ device ].sector0ab.binarySize;
-          }
-          else
-          {
-            if ( pageSize == STANDARD_PAGE_SIZE )
-              config = &addressFormat[ device ].sector.standardSize;
-            else
-              config = &addressFormat[ device ].sector.binarySize;
-          }
-
-          if ( sectionNumber >= chipSpecs[ device ].numSectors )
-            errorFlags |= ADDRESS_OVERRUN;
-          break;
-      };
-
-
-      if ( !config )
-      {
-        return;
-      }
-
-      // This ignores Sector 0a for simplicity reasons. The full address below directly corresponds
-      // to Sector 0b, and the format seems common across all AT45 chips. Use Block 0 to get the address for Sector 0a.
-      if ( ( section == SECTOR ) && ( sectionNumber == 0 ) )
-      {
-        fullAddress = 1u << config->dummyBitsLSB;
-      }
-      else
-      {
-        uint32_t bitMask = ( 1u << config->addressBits ) - 1u;
-        fullAddress      = ( sectionNumber & bitMask ) << config->dummyBitsLSB;
-      }
-
-      /*	Note: Cannot use memcpy because it reverses the byte order expected by the flash chip.
-       *	For example, if the value of 'fullAddress' were 0xAABBCC, the memcpy would put the values into the cmdBuffer as
-       *0xCCBBAA. This is correct as far as the MCU is concerned, but the flash chip needs the data exactly as calculated:
-       *0xAABBCC
-       */
-      cmdBuffer[ 1 ] = ( fullAddress & 0xFF0000 ) >> 16;
-      cmdBuffer[ 2 ] = ( fullAddress & 0x00FF00 ) >> 8;
-      cmdBuffer[ 3 ] = fullAddress & 0x0000FF;
-    }
-
-    uint32_t AT45::getSectionFromAddress( const FlashSection section, const uint32_t rawAddress )
-    {
-      uint32_t sectionNumber = 0;
-
-      switch ( section )
-      {
-        case PAGE:
-          sectionNumber = rawAddress / pageSize;
-
-          if ( sectionNumber >= chipSpecs[ device ].numPages )
-            errorFlags |= INVALID_SECTION_NUMBER;
-          break;
-
-        case BLOCK:
-          sectionNumber = rawAddress / blockSize;
-
-          if ( sectionNumber >= chipSpecs[ device ].numBlocks )
-            errorFlags |= INVALID_SECTION_NUMBER;
-          break;
-
-        case SECTOR:  // Does not differentiate between Sector 0a/0b and will return 0 for both address ranges.
-          sectionNumber = rawAddress / sectorSize;
-
-          if ( sectionNumber >= chipSpecs[ device ].numSectors )
-            errorFlags |= INVALID_SECTION_NUMBER;
-          break;
-      };
-
-      return sectionNumber;
-    }
-
-    uint32_t AT45::getSectionStartAddress( const FlashSection section, const uint32_t sectionNumber )
-    {
-      uint32_t address = 0u;
-
-      switch ( section )
-      {
-        case SECTOR:
-          address = sectionNumber * sectorSize;
-          break;
-
-        case BLOCK:
-          address = sectionNumber * blockSize;
-          break;
-
-        case PAGE:
-          address = sectionNumber * pageSize;
-          break;
-      };
-
-      return address;
-    }
-
-    void AT45::SPI_write( const uint8_t *const data, const uint32_t len, const bool disableSS )
-    {
-      writeComplete = false;
-      spi->setChipSelect( Chimera::GPIO::State::LOW );
-      spi->writeBytes( data, len, 10 );
-
-      if ( disableSS )
-      {
-        spi->setChipSelect( Chimera::GPIO::State::HIGH );
-      }
-    }
-
-    void AT45::SPI_read( uint8_t *const data, const uint32_t len, const bool disableSS )
-    {
-      readComplete = false;
-      spi->setChipSelect( Chimera::GPIO::State::LOW );
-      spi->readBytes( data, len, 10 );
-
-      if ( disableSS )
-      {
-        spi->setChipSelect( Chimera::GPIO::State::HIGH );
-      }
-    }
-
-
-
-
     uint32_t AT45::getFlashCapacity()
     {
       uint32_t retVal = 0u;
@@ -1168,8 +863,6 @@ namespace Adesto
     {
       return sectorSize;
     }
-
-
 
     BlockStatus AT45::DiskOpen( const uint8_t volNum, BlockMode openMode )
     {
@@ -1244,9 +937,9 @@ namespace Adesto
           this is a non-blocking operation if the Chimera backend implements
           the delay mechanism properly.
           ------------------------------------------------*/
-          while( !isDeviceReady() )
+          while ( !isDeviceReady() )
           {
-            Chimera::delayMilliseconds( chipDelay[ device ].pageEraseAndProgramming );
+            Chimera::delayMilliseconds( chipDelay[ static_cast<uint8_t>( device ) ].pageEraseAndProgramming );
           }
 
           /*------------------------------------------------
@@ -1258,7 +951,7 @@ namespace Adesto
           }
           else
           {
-            bytesLeft    -= partialWriteSize;
+            bytesLeft -= partialWriteSize;
             bytesWritten += partialWriteSize;
             currentBlock += 1u;
           }
@@ -1269,18 +962,18 @@ namespace Adesto
         ------------------------------------------------*/
         if ( error == Chimera::CommonStatusCodes::OK )
         {
-          while( bytesLeft >= pageSize )
+          while ( bytesLeft >= pageSize )
           {
             error = pageWrite( SRAMBuffer::BUFFER1, 0, currentBlock, dataIn + bytesWritten, pageSize );
 
             while ( !isDeviceReady() )
             {
-              Chimera::delayMilliseconds( chipDelay[ device ].pageEraseAndProgramming );
+              Chimera::delayMilliseconds( chipDelay[ static_cast<uint8_t>( device ) ].pageEraseAndProgramming );
             }
 
             if ( error == Chimera::CommonStatusCodes::OK )
             {
-              bytesLeft    -= pageSize;
+              bytesLeft -= pageSize;
               bytesWritten += pageSize;
               currentBlock += 1u;
             }
@@ -1305,7 +998,7 @@ namespace Adesto
           ------------------------------------------------*/
           while ( !isDeviceReady() )
           {
-            Chimera::delayMilliseconds( chipDelay[ device ].pageEraseAndProgramming );
+            Chimera::delayMilliseconds( chipDelay[ static_cast<uint8_t>( device ) ].pageEraseAndProgramming );
           }
 
           /*------------------------------------------------
@@ -1358,15 +1051,17 @@ namespace Adesto
       {
         error = ErrCode::OVERRUN;
       }
+      else if ( ( address % pageSize != 0 ) || ( len % pageSize != 0 ) )
+      {
+        error = ErrCode::UNALIGNED_MEM;
+      }
       else
       {
-        //Work down from the largest possible sizing down to the smallest. Then do that whole read/modify/write thing for
-        //the leading and trailing pages.
+        DeviceDescriptor dev{ pageSize, blockSize, sectorSize };
+        FlashUtilities util( dev );
 
-        // Holy crap I think previous me already built the utility functions to calculate this...
-        // I just need to copy out the lead/trail pages.
-
-        error = Chimera::CommonStatusCodes::OK;
+        auto range = util.getCompositeSections( address, len );
+        error      = eraseRanges( range );
       }
 
       return error;
@@ -1385,6 +1080,222 @@ namespace Adesto
     Chimera::Status_t AT45::eraseCompleteCallback( const Chimera::void_func_uint32_t func )
     {
       return Chimera::CommonStatusCodes::NOT_SUPPORTED;
+    }
+
+    Chimera::Status_t AT45::eraseRanges( const SectionList &range )
+    {
+      Chimera::Status_t error = Chimera::CommonStatusCodes::OK;
+
+      /*------------------------------------------------
+      Sectors
+      ------------------------------------------------*/
+      for ( size_t i = 0; i < range.sectors.size(); i++ )
+      {
+        error = eraseSector( range.sectors[ i ] );
+
+        while ( isDeviceReady() != Chimera::CommonStatusCodes::OK )
+        {
+          Chimera::delayMilliseconds( chipDelay[ static_cast<uint8_t>( device ) ].sectorErase );
+        }
+
+        if ( isErasePgmError() != Chimera::CommonStatusCodes::OK )
+        {
+          error = ErrCode::FAILED_ERASE;
+        }
+      }
+
+      /*------------------------------------------------
+      Blocks
+      ------------------------------------------------*/
+      for ( size_t i = 0; i < range.blocks.size(); i++ )
+      {
+        error = eraseBlock( range.blocks[ i ] );
+
+        while ( isDeviceReady() != Chimera::CommonStatusCodes::OK )
+        {
+          Chimera::delayMilliseconds( chipDelay[ static_cast<uint8_t>( device ) ].blockErase );
+        }
+
+        if ( isErasePgmError() != Chimera::CommonStatusCodes::OK )
+        {
+          error = ErrCode::FAILED_ERASE;
+        }
+      }
+
+      /*------------------------------------------------
+      Pages
+      ------------------------------------------------*/
+      for ( size_t i = 0; i < range.pages.size(); i++ )
+      {
+        error = erasePage( range.pages[ i ] );
+
+        while ( isDeviceReady() != Chimera::CommonStatusCodes::OK )
+        {
+          Chimera::delayMilliseconds( chipDelay[ static_cast<uint8_t>( device ) ].pageErase );
+        }
+
+        if ( isErasePgmError() != Chimera::CommonStatusCodes::OK )
+        {
+          error = ErrCode::FAILED_ERASE;
+        }
+      }
+
+      return error;
+    }
+
+    void AT45::buildReadWriteCommand( const uint16_t pageNumber, const uint16_t offset )
+    {
+      /*------------------------------------------------
+      Grab the correct page configuration size. This informs the code
+      how much bit shifting to apply when building the command.
+      ------------------------------------------------*/
+      const AddressDescriptions *config;
+      if ( pageSize == PAGE_SIZE_EXTENDED )
+      {
+        config = &addressFormat[ static_cast<uint8_t>( device ) ].page.standardSize;
+      }
+      else
+      {
+        config = &addressFormat[ static_cast<uint8_t>( device ) ].page.binarySize;
+      }
+
+      /*------------------------------------------------
+      Generate masks of the correct bit width to clean up the input variables
+      ------------------------------------------------*/
+      uint32_t addressBitMask = ( 1u << config->addressBits ) - 1u;
+      uint32_t offsetBitMask  = ( 1u << config->dummyBitsLSB ) - 1u;
+
+      /*------------------------------------------------
+       The full address is really only 3 bytes wide. They are set up as
+       follows, with 'a' == address bit, 'o' == offset bit and 'x' == don't care.
+       This is the exact order in which it must be transmitted. (ie MSB first)
+
+                               Byte 1 | Byte 2 | Byte 3
+      For 264 byte page size: xxxaaaaa|aaaaaaao|oooooooo
+      For 256 byte page size: xxxxaaaa|aaaaaaaa|oooooooo
+      ------------------------------------------------*/
+      uint32_t fullAddress = ( ( pageNumber & addressBitMask ) << config->dummyBitsLSB ) | ( offsetBitMask & offset );
+
+      /*------------------------------------------------
+      Note: Cannot use memcpy because it reverses the byte order expected by the flash chip.
+      For example, if the value of 'fullAddress' were 0xAABBCC, the memcpy would put the values into the cmdBuffer as
+       *0xCCBBAA. This is correct as far as the MCU is concerned, but the flash chip needs the data exactly as calculated:
+       *0xAABBCC
+      ------------------------------------------------*/
+      cmdBuffer[ 1 ] = ( fullAddress & 0xFF0000 ) >> 16;
+      cmdBuffer[ 2 ] = ( fullAddress & 0x00FF00 ) >> 8;
+      cmdBuffer[ 3 ] = ( fullAddress & 0x0000FF );
+    }
+
+    void AT45::buildEraseCommand( const Chimera::Modules::Memory::Section_t section, const uint32_t sectionNumber )
+    {
+      uint32_t fullAddress              = 0u;
+      const AddressDescriptions *config = nullptr;
+
+      switch ( section )
+      {
+        case Section_t::PAGE:
+          if ( pageSize == PAGE_SIZE_EXTENDED )
+          {
+            config = &addressFormat[ static_cast<uint8_t>( device ) ].page.standardSize;
+          }
+          else
+          {
+            config = &addressFormat[ static_cast<uint8_t>( device ) ].page.binarySize;
+          }
+          break;
+
+        case Section_t::BLOCK:
+          if ( pageSize == PAGE_SIZE_EXTENDED )
+          {
+            config = &addressFormat[ static_cast<uint8_t>( device ) ].block.standardSize;
+          }
+          else
+          {
+            config = &addressFormat[ static_cast<uint8_t>( device ) ].block.binarySize;
+          }
+          break;
+
+        case Section_t::SECTOR:
+          if ( sectionNumber == 0 )
+          {
+            if ( pageSize == PAGE_SIZE_EXTENDED )
+            {
+              config = &addressFormat[ static_cast<uint8_t>( device ) ].sector0ab.standardSize;
+            }
+            else
+            {
+              config = &addressFormat[ static_cast<uint8_t>( device ) ].sector0ab.binarySize;
+            }
+          }
+          else
+          {
+            if ( pageSize == PAGE_SIZE_EXTENDED )
+            {
+              config = &addressFormat[ static_cast<uint8_t>( device ) ].sector.standardSize;
+            }
+            else
+            {
+              config = &addressFormat[ static_cast<uint8_t>( device ) ].sector.binarySize;
+            }
+          }
+          break;
+
+        default:
+          break;
+      };
+
+      if ( !config )
+      {
+        return;
+      }
+
+      /*------------------------------------------------
+      This ignores Sector 0a for simplicity reasons. The full address below
+      directly corresponds to Sector 0b, and the format seems common across
+      all AT45 chips. Use Block 0 to get the address for Sector 0a.
+      ------------------------------------------------*/
+      if ( ( section == Section_t::SECTOR ) && ( sectionNumber == 0 ) )
+      {
+        fullAddress = 1u << config->dummyBitsLSB;
+      }
+      else
+      {
+        uint32_t bitMask = ( 1u << config->addressBits ) - 1u;
+        fullAddress      = ( sectionNumber & bitMask ) << config->dummyBitsLSB;
+      }
+
+      /*------------------------------------------------
+      Note: Cannot use memcpy because it reverses the byte order expected by the flash chip.
+      For example, if the value of 'fullAddress' were 0xAABBCC, the memcpy would put the values
+      into the cmdBuffer as 0xCCBBAA. This is correct as far as the MCU is concerned, but the
+      flash chip needs the data exactly as calculated: 0xAABBCC
+      ------------------------------------------------*/
+      cmdBuffer[ 1 ] = ( fullAddress & 0xFF0000 ) >> 16;
+      cmdBuffer[ 2 ] = ( fullAddress & 0x00FF00 ) >> 8;
+      cmdBuffer[ 3 ] = fullAddress & 0x0000FF;
+    }
+
+    void AT45::SPI_write( const uint8_t *const data, const uint32_t len, const bool disableSS )
+    {
+      spi->setChipSelect( Chimera::GPIO::State::LOW );
+      spi->writeBytes( data, len, 10 );
+
+      if ( disableSS )
+      {
+        spi->setChipSelect( Chimera::GPIO::State::HIGH );
+      }
+    }
+
+    void AT45::SPI_read( uint8_t *const data, const uint32_t len, const bool disableSS )
+    {
+      spi->setChipSelect( Chimera::GPIO::State::LOW );
+      spi->readBytes( data, len, 10 );
+
+      if ( disableSS )
+      {
+        spi->setChipSelect( Chimera::GPIO::State::HIGH );
+      }
     }
 
   }  // namespace NORFlash

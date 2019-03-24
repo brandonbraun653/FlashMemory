@@ -1,11 +1,11 @@
 /********************************************************************************
- *   File Name:
- *       at45db081.hpp
+ *  File Name:
+ *      at45db081.hpp
  *
- *   Description:
- *       API definition for the Adesto AT45 series of NOR flash chips
+ *  Description:
+ *      API definition for the Adesto AT45 series of NOR flash chips
  *
- *   2019 | Brandon Braun | brandonbraun653@gmail.com
+ *  2019 | Brandon Braun | brandonbraun653@gmail.com
  ********************************************************************************/
 #pragma once
 #ifndef AT45DB081_HPP
@@ -26,45 +26,18 @@
 
 namespace Adesto
 {
-  enum FlashSection
-  {
-    PAGE,
-    BLOCK,
-    SECTOR
-  };
-
-  enum FlashChip
-  {
-    AT45DB081E,
-    NUM_SUPPORTED_CHIPS
-  };
-
-  enum class SRAMBuffer : uint8_t
-  {
-    BUFFER1,
-    BUFFER2
-  };
-
-  struct EraseRange
-  {
-    uint32_t start;
-    uint32_t end;
-    bool rangeValid = false;
-  };
-
   namespace NORFlash
   {
-    enum StatusRegisterBitPos : uint16_t
+    enum class FlashChip : uint8_t
     {
-      READY_BUSY_Pos         = ( 1u << 15 ),
-      COMPARE_RESULT_Pos     = ( 1u << 14 ),
-      SECTOR_PROTECTION_Pos  = ( 1u << 9 ),
-      PAGE_SIZE_CONFIG_Pos   = ( 1u << 8 ),
-      ERASE_PGM_ERROR_Pos    = ( 1u << 5 ),
-      SECTOR_LOCKDOWN_EN_Pos = ( 1u << 3 ),
-      BUFF2_PGM_SUSPEND_Pos  = ( 1u << 2 ),
-      BUFF1_PGM_SUSPEND_Pos  = ( 1u << 1 ),
-      ERASE_SUSPEND_Pos      = ( 1u << 0 )
+      AT45DB081E,
+      NUM_SUPPORTED_CHIPS
+    };
+
+    enum class SRAMBuffer : uint8_t
+    {
+      BUFFER1,
+      BUFFER2
     };
 
     struct StatusRegister
@@ -80,19 +53,28 @@ namespace Adesto
       bool eraseSuspend           = false;
     };
 
+    struct AT45xx_DeviceInfo
+    {
+      uint8_t manufacturerID;
+      FamilyCode familyCode;
+      DensityCode densityCode;
+      SubCode subCode;
+      ProductVariant productVariant;
+    };
+
     class AT45;
     typedef std::shared_ptr<AT45> AT45_sPtr;
     typedef std::unique_ptr<AT45> AT45_uPtr;
 
     /**
-     *  Provides a user friendly interface for Adesto flash memory chips of the AT45 family. The class supports asynchronous
-     *  operation through FreeRTOS using DMA mode SPI. The SPI driver comes from the Chimera library, which is a high level HAL
-     *  that is intended to provide commonly used peripheral functions for a variety of microcontrollers.
+     *  Provides a user friendly interface for Adesto flash memory chips of the AT45 family.
+     *  The SPI driver comes from the Chimera library, which is a high level HAL that is intended to provide commonly
+     *  used peripheral functions for a variety of microcontrollers.
      *
      *	Care must be taken when passing in the pointers for reading/writing data. Due to using the Chimera HAL, it is not
      *  guaranteed that a copy of the buffer data will be made, as that choice is left up to the device driver back end. For
      *  safety, it is good practice to keep the pointers in scope and not modify its data until the read/write/program
-     *operations are complete.
+     *  operations are complete.
      */
     class AT45 : public Chimera::Modules::Memory::BlockDevice, public Chimera::Modules::Memory::GenericFlashInterface
     {
@@ -100,6 +82,9 @@ namespace Adesto
       AT45()  = default;
       ~AT45() = default;
 
+      /**
+       * Useful for switching out SPI driver types for dependency injection. Mostly just used for testing.
+       */
       template<typename xSPI>
       AT45( xSPI spi ) : spi( spi )
       {
@@ -111,7 +96,7 @@ namespace Adesto
        *	@param[in]  chip          The particular AT45xxx variant chip to connect to
        *  @return Chimera::Status_t
        */
-      Chimera::Status_t init( const FlashChip chip );
+      Chimera::Status_t init( const FlashChip chip, const uint32_t clockFreq = 1000000 );
 
       /**
        *  Writes data to one of the SRAM buffers, but does not write it to memory.
@@ -344,21 +329,21 @@ namespace Adesto
        *
        *	@return uint32_t
        */
-       uint32_t getPageSize();
+      uint32_t getPageSize();
 
       /**
        *	Gets the current block size in bytes
        *
        *	@return uint32_t
        */
-       uint32_t getBlockSize();
+      uint32_t getBlockSize();
 
       /**
        *	Gets the current sector configuration size in bytes
        *
        *	@return uint32_t
        */
-       uint32_t getSectorSize();
+      uint32_t getSectorSize();
 
       /*------------------------------------------------
       Block Device Interface Functions
@@ -386,7 +371,7 @@ namespace Adesto
 
       Chimera::Status_t read( const uint32_t address, uint8_t *const data, const uint32_t length ) final override;
 
-      Chimera::Status_t erase( const uint32_t begin, const uint32_t end ) final override;
+      Chimera::Status_t erase( const uint32_t address, const uint32_t length ) final override;
 
       Chimera::Status_t writeCompleteCallback( const Chimera::void_func_uint32_t func ) final override;
 
@@ -398,130 +383,79 @@ namespace Adesto
 #if defined( GMOCK_TEST )
       Chimera::Mock::SPIMock *spi;
 #else
-      Chimera::SPI::SPIClass_sPtr spi; /**< SPI object used for talking with the flash chip */
+      Chimera::SPI::SPIClass_sPtr spi;
 #endif
 
-      Chimera::SPI::Setup setup; /**< SPI initialization settings */
+      FlashChip device;                  /**< Holds the device model number */
+      Chimera::SPI::Setup setup;         /**< SPI initialization settings */
+      AT45xx_DeviceInfo chipInfo;        /**< Information regarding flash chip specifics */
+      std::array<uint8_t, 10> cmdBuffer; /**< Buffer for holding a command sequence */
 
-      FlashChip device;       /**< Holds the device model number */
-      AT45xx_DeviceInfo chipInfo; /**< Information regarding flash chip specifics */
-
-      bool spiInitialized     = false;
-      bool chipInitialized    = false;
-      bool writeComplete      = false;
-      bool readComplete       = false;
-      uint32_t clockFrequency = 0;    /**< Contains actual frequency of the SPI clock in Hz */
-      float maxClockErr       = 0.2f; /**< Max percent error between requested clock and actual clock freq */
-
-      uint32_t pageSize   = 264;   /**< Keeps track of the current page size configuration in bytes */
-      uint32_t blockSize  = 2112;  /**< Keeps track of the current block size configuration in bytes */
-      uint32_t sectorSize = 65472; /**< Keeps track of the current sector size configuration in bytes */
-
-      uint8_t addressBytes;                 /**< How many address bytes are used for command invocations */
-      std::array<uint8_t, 10> cmdBuffer;    /**< Buffer for holding a command sequence */
-      std::array<uint8_t, 3> memoryAddress; /**< Bytes needed for memory addressing. Adesto seems to only use 3.*/
-
-      volatile uint32_t errorFlags = 0; /**< Bit-field indicating various errors as defined in .cpp file */
-
-      /* Data structure to support indexing memory sections */
-      struct MemoryRange
-      {
-        struct Range
-        {
-          uint32_t start;               /**< Which page/block/sector the range begins on */
-          uint32_t end;                 /**< Which page/block/sector the range ends on */
-          uint32_t startPageOffset = 0; /**< Starting address offset from beginning of the first page (zero if not a page) */
-          uint32_t endPageOffset   = 0; /**< How many bytes to write from beginning of the last page (zero if not a page) */
-        };
-
-        Range sector;
-        Range block;
-        Range page;
-      };
+      bool spiInitialized     = false;              /**< Tracks if the SPI driver has been set up*/
+      bool chipInitialized    = false;              /**< Tracks if the entire chip has been initialized properly */
+      uint32_t clockFrequency = 1;                  /**< Actual frequency of the SPI clock in Hz */
+      uint32_t pageSize       = PAGE_SIZE_BINARY;   /**< Keeps track of the current page size configuration in bytes */
+      uint32_t blockSize      = BLOCK_SIZE_BINARY;  /**< Keeps track of the current block size configuration in bytes */
+      uint32_t sectorSize     = SECTOR_SIZE_BINARY; /**< Keeps track of the current sector size configuration in bytes */
 
       /**
-       *   Converts an address and length into whole sections that can be erased
+       *  Erases a ranged set of pages, blocks, and sectors
        *
-       *   @param[in]  address     TODO
-       *   @param[in]  len         TODO
-       *   @return MemoryRange
+       *  @param[in]  range       Composite list of pages, blocks, and sectors that should be erased
+       *  @return Chimera::Status_t
        */
-      MemoryRange getErasableSections( uint32_t address, uint32_t len );
+      Chimera::Status_t eraseRanges( const Chimera::Modules::Memory::SectionList &range );
 
       /**
-       *   Erases a set of ranges as defined by a MemoryRange object
-       *
-       *   @param[in]  range       TODO
-       *   @return TODO
-       */
-      Chimera::Status_t eraseRanges( const MemoryRange range, Chimera::void_func_uint32_t onComplete = nullptr );
-
-      /**
-       *   Generates the appropriate command sequence for several read and write operations, automatically
+       *  Generates the appropriate command sequence for several read and write operations, automatically
        *	writing to the class member 'cmdBuffer'.
        *
-       *   @note This command only works for several types of operations:
-       *		. Direct Page Read (opcodes: 0xD2h)
-       *		. Buffer Read (opcodes: 0xD1h, 0xD3h, 0xD4h, 0xD6h)
-       *		. Buffer Write (opcodes: 0x84h, 0x87h)
-       *		. Main Memory Page Program through Buffer with Built-In Erase (opcodes: 0x82h, 0x85h)
-       *		. Main Memory Page Program through Buffer without Built-In Erase (opcodes: 0x88h, 0x89h)
-       *		. Main Memory Byte/Page Program through Buffer 1 without Built-In Erase (opcodes: 0x02h)
-       *		. Read-Modify-Write (opcodes: 0x58h, 0x59h)
+       *  @note This command only works for several types of operations:
+       *		- Direct Page Read (opcodes: 0xD2h)
+       *		- Buffer Read (opcodes: 0xD1h, 0xD3h, 0xD4h, 0xD6h)
+       *		- Buffer Write (opcodes: 0x84h, 0x87h)
+       *		- Continuous Array Read (opcodes: 0x1Bh, 0x0Bh, 0x03h, 0x01h)
+       *		- Main Memory Page Program through Buffer with Built-In Erase (opcodes: 0x82h, 0x85h)
+       *		- Main Memory Page Program through Buffer without Built-In Erase (opcodes: 0x88h, 0x89h)
+       *		- Main Memory Byte/Page Program through Buffer 1 without Built-In Erase (opcodes: 0x02h)
+       *		- Read-Modify-Write (opcodes: 0x58h, 0x59h)
        *
        *	@param[in]	pageNumber	The desired page number in memory
        *	@param[in]	offset		The desired offset within the page
-       *   @return void
+       *  @return void
        */
       void buildReadWriteCommand( const uint16_t pageNumber, const uint16_t offset = 0x0000 );
 
       /**
-       *   Creates the command sequence needed to erase a particular flash section.
-       *   Automatically overwrites the class member 'cmdBuffer' with the appropriate data.
+       *  Creates the command sequence needed to erase a particular flash section.
+       *  Automatically overwrites the class member 'cmdBuffer' with the appropriate data.
        *
        *	@param[in]	section			What type of section to erase (page, block, etc)
        *	@param[in]	sectionNumber	Which index of that section type to erase (0, 1, 2, etc)
-       *   @return void
+       *  @return void
        */
-      void buildEraseCommand( const FlashSection section, const uint32_t sectionNumber );
+      void buildEraseCommand( const Chimera::Modules::Memory::Section_t section, const uint32_t sectionNumber );
 
       /**
-       *   Parses an address into a section category
+       *  Writes data on the SPI bus
        *
-       *   @param[in]  section        TODO
-       *   @param[in]  rawAddress     TODO
-       *   @return TODO
-       */
-      uint32_t getSectionFromAddress( const FlashSection section, const uint32_t rawAddress );
-
-      /**
-       *   Gets a section number's starting address in memory
-       *
-       *   @param[in]  section         TODO
-       *   @param[in]  sectionNumber   TODO
-       *   @return TODO
-       */
-      uint32_t getSectionStartAddress( const FlashSection section, const uint32_t sectionNumber );
-
-      /**
-       *   Writes data on the SPI bus
-       *
-       *   @param[in]  data        Data to be written
-       *   @param[in]  len         How many bytes to be written
-       *   @param[in]  disableSS   Optionally disable the chip select line after the transfer completes
-       *   @return void
+       *  @param[in]  data        Data to be written
+       *  @param[in]  len         How many bytes to be written
+       *  @param[in]  disableSS   Optionally disable the chip select line after the transfer completes
+       *  @return void
        */
       void SPI_write( const uint8_t *const data, const uint32_t len, const bool disableSS = true );
 
       /**
-       *   Read data from the SPI bus
+       *  Read data from the SPI bus
        *
-       *   @param[in]  data        Where to read data into
-       *   @param[in]  len         How much data to read
-       *   @param[in]  disableSS   Optionally disable the chip select line after the transfer completes
-       *   @return void
+       *  @param[in]  data        Where to read data into
+       *  @param[in]  len         How much data to read
+       *  @param[in]  disableSS   Optionally disable the chip select line after the transfer completes
+       *  @return void
        */
       void SPI_read( uint8_t *const data, const uint32_t len, const bool disableSS = true );
+
     };
   }  // namespace NORFlash
 }  // namespace Adesto

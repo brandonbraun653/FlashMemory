@@ -29,7 +29,7 @@
 TEST_F( VirtualFlash, SRAMCommit_PreInit )
 {
   EXPECT_EQ( Chimera::CommonStatusCodes::NOT_INITIALIZED,
-             flash->sramCommit( Adesto::SRAMBuffer::BUFFER1, 0xFFFF, false ) );
+             flash->sramCommit( Adesto::NORFlash::SRAMBuffer::BUFFER1, 0xFFFF, false ) );
 }
 
 #endif /* GMOCK_TEST */
@@ -38,7 +38,7 @@ TEST_F( VirtualFlash, SRAMCommit_PreInit )
 
 TEST_F( HardwareFlash, SRAMCommit_ReadWrite_Buffer1 )
 {
-  using namespace Adesto;
+  using namespace Adesto::NORFlash;
 
   const uint8_t arraySize                 = 10;
   std::array<uint8_t, arraySize> loadData = { 0x00, 0x22, 0x44, 0x66, 0x88, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE };
@@ -103,7 +103,7 @@ TEST_F( HardwareFlash, SRAMCommit_ReadWrite_Buffer1 )
 
 TEST_F( HardwareFlash, SRAMCommit_ReadWrite_Buffer2 )
 {
-  using namespace Adesto;
+  using namespace Adesto::NORFlash;
 
   const uint8_t arraySize                 = 10;
   std::array<uint8_t, arraySize> loadData = { 0x00, 0x22, 0x44, 0x66, 0x88, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE };
@@ -168,7 +168,7 @@ TEST_F( HardwareFlash, SRAMCommit_ReadWrite_Buffer2 )
 
 TEST_F( HardwareFlash, SRAMCommit_FullPage )
 {
-  using namespace Adesto;
+  using namespace Adesto::NORFlash;
 
   std::random_device rnd_device;
   std::mt19937 mersenne_engine{ rnd_device() };

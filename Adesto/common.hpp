@@ -28,6 +28,43 @@ namespace Adesto
   -------------------------------------------------------------------------------*/
   static constexpr Jedec_t JEDEC_CODE = 0x1F;
 
+  /*-------------------------------------------------
+  Addressing Constants
+  -------------------------------------------------*/
+  static constexpr size_t ADDRESS_BYTE_1_POS = 0;
+  static constexpr size_t ADDRESS_BYTE_1_MSK = 0x000000FF;
+
+  static constexpr size_t ADDRESS_BYTE_2_POS = 8;
+  static constexpr size_t ADDRESS_BYTE_2_MSK = 0x0000FF00;
+
+  static constexpr size_t ADDRESS_BYTE_3_POS = 16;
+  static constexpr size_t ADDRESS_BYTE_3_MSK = 0x00FF0000;
+
+
+  /*-------------------------------------------------
+  Manufacturer & Device ID Bit Masks
+  -------------------------------------------------*/
+  static constexpr uint8_t MFR_MSK = 0xFF;
+
+  static constexpr uint8_t FAMILY_CODE_POS = 5;
+  static constexpr uint8_t FAMILY_CODE_MSK = 0x07;
+
+  static constexpr uint8_t DENSITY_CODE_POS = 0;
+  static constexpr uint8_t DENSITY_CODE_MSK = 0x1F;
+
+  static constexpr uint8_t SUB_CODE_POS = 5;
+  static constexpr uint8_t SUB_CODE_MSK = 0x07;
+
+  static constexpr uint8_t PROD_VERSION_POS = 0;
+  static constexpr uint8_t PROD_VERSION_MSK = 0x1F;
+
+  /*-------------------------------------------------
+  Common Block Sizes
+  -------------------------------------------------*/
+  static constexpr size_t CHUNK_SIZE_4K = 4000;
+  static constexpr size_t CHUNK_SIZE_32K = 32000;
+  static constexpr size_t CHUNK_SIZE_64K = 64000;
+
   /*-------------------------------------------------------------------------------
   Enumerations
   -------------------------------------------------------------------------------*/

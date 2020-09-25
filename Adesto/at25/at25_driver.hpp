@@ -66,6 +66,12 @@ namespace Adesto::AT25
      */
     bool readDeviceInfo( DeviceInfo &info );
 
+    /**
+     *  Reads the status register bytes
+     *
+     *  @return uint16_t
+     */
+    uint16_t readStatusRegister();
 
   private:
     Chimera::SPI::Driver_sPtr spi;      /**< SPI driver instance */

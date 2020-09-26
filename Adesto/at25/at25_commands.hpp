@@ -18,6 +18,11 @@
 namespace Adesto::AT25::Command
 {
   /*-------------------------------------------------------------------------------
+  General Constants
+  -------------------------------------------------------------------------------*/
+  static constexpr size_t MAX_CMD_LEN = 5; /**< Max bytes used in cmd sequence. Doesn't include data payload lengths. */
+
+  /*-------------------------------------------------------------------------------
   Read Commands
   -------------------------------------------------------------------------------*/
   static constexpr uint8_t READ_ARRAY_HS = 0x0B;
@@ -41,21 +46,24 @@ namespace Adesto::AT25::Command
   Erase Commands
   -------------------------------------------------------------------------------*/
   static constexpr uint8_t BLOCK_ERASE_4K = 0x20;
-
-
   static constexpr uint8_t BLOCK_ERASE_32K = 0x52;
-
-
   static constexpr uint8_t BLOCK_ERASE_64K = 0xD8;
+
+  static constexpr uint8_t BLOCK_ERASE_CMD_LEN = 1;
+  static constexpr uint8_t BLOCK_ERASE_OPS_LEN = 4;
 
 
   static constexpr uint8_t CHIP_ERASE = 0xC7;
+  static constexpr uint8_t CHIP_ERASE_CMD_LEN = 1;
+  static constexpr uint8_t CHIP_ERASE_OPS_LEN = 1;
 
 
   /*-------------------------------------------------------------------------------
   Protection Commands
   -------------------------------------------------------------------------------*/
   static constexpr uint8_t WRITE_ENABLE = 0x06;
+  static constexpr uint8_t WRITE_ENABLE_CMD_LEN = 1;
+  static constexpr uint8_t WRITE_ENABLE_OPS_LEN = 1;
 
 
   static constexpr uint8_t WRITE_DISABLE = 0x04;

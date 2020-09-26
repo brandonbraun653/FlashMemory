@@ -61,9 +61,10 @@ namespace Adesto
   /*-------------------------------------------------
   Common Block Sizes
   -------------------------------------------------*/
-  static constexpr size_t CHUNK_SIZE_4K = 4000;
-  static constexpr size_t CHUNK_SIZE_32K = 32000;
-  static constexpr size_t CHUNK_SIZE_64K = 64000;
+  static constexpr size_t CHUNK_SIZE_256 = 256;
+  static constexpr size_t CHUNK_SIZE_4K  = 4 * 1024;
+  static constexpr size_t CHUNK_SIZE_32K = 32 * 1024;
+  static constexpr size_t CHUNK_SIZE_64K = 64 * 1024;
 
   /*-------------------------------------------------------------------------------
   Enumerations
@@ -96,6 +97,19 @@ namespace Adesto
     VERSION1 = 0x01,
     // Add more as needed
   };
+
+  /*-------------------------------------------------------------------------------
+  Public Functions
+  -------------------------------------------------------------------------------*/
+  /**
+   *  Converts supported density codes into the appropriate
+   *  byte amounts.
+   *
+   *  @param[in]  density     Which density to look up
+   *  @return size_t
+   */
+  size_t densityToBytes( const DensityCode density );
+
 }  // namespace Adesto
 
-#endif  /* !ADESTO_COMMON_HPP */
+#endif /* !ADESTO_COMMON_HPP */

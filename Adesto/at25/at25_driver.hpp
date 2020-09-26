@@ -12,9 +12,6 @@
 #ifndef ADESTO_AT25_MEMORY_HPP
 #define ADESTO_AT25_MEMORY_HPP
 
-/* Adesto Includes */
-#include <Adesto/at25/at25_types.hpp>
-
 /* Aurora Includes */
 #include <Aurora/memory>
 
@@ -22,6 +19,10 @@
 #include <Chimera/common>
 #include <Chimera/spi>
 #include <Chimera/thread>
+
+/* Adesto Includes */
+#include <Adesto/at25/at25_types.hpp>
+#include <Adesto/at25/at25_commands.hpp>
 
 namespace Adesto::AT25
 {
@@ -74,32 +75,14 @@ namespace Adesto::AT25
     uint16_t readStatusRegister();
 
   private:
-    Chimera::SPI::Driver_sPtr spi;      /**< SPI driver instance */
-    std::array<uint8_t, 10> cmdBuffer;  /**< Buffer for holding a command sequence */
+    DeviceInfo mInfo;                                    /**< Device specific details */
+    Chimera::SPI::Driver_sPtr mSPI;                      /**< SPI driver instance */
+    std::array<uint8_t, Command::MAX_CMD_LEN> cmdBuffer; /**< Buffer for holding a command sequence */
 
     /*-------------------------------------------------------------------------------
     Private Functions
     -------------------------------------------------------------------------------*/
-    /**
-     *  Writes data on the SPI bus
-     *
-     *  @param[in]  data        Data to be written
-     *  @param[in]  len         How many bytes to be written
-     *  @param[in]  activeCS    Determines if CS should stay active on exit
-     *  @return void
-     */
-    void SPI_write( const void *const data, const size_t len, const bool activeCS );
-
-    /**
-     *  Read data from the SPI bus
-     *
-     *  @param[in]  data        Where to read data into
-     *  @param[in]  len         How much data to read
-     *  @param[in]  activeCS    Determines if CS should stay active on exit
-     *  @return void
-     */
-    void SPI_read( void *const data, const size_t len, const bool activeCS );
-
+    void issueWriteEnable();
   };
 }  // namespace Adesto::AT25
 

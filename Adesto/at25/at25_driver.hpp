@@ -41,7 +41,9 @@ namespace Adesto::AT25
     Aurora::Memory::Status read( const size_t address, void *const data, const size_t length ) final override;
     Aurora::Memory::Status erase( const size_t address, const size_t length ) final override;
     Aurora::Memory::Status erase( const Aurora::Memory::Chunk chunk, const size_t id ) final override;
+    Aurora::Memory::Status eraseChip() final override;
     Aurora::Memory::Status flush() final override;
+    Aurora::Memory::Status pendEvent( const Aurora::Memory::Event event, const size_t timeout ) final override;
     Aurora::Memory::Status onEvent( const Aurora::Memory::Event event, void ( *func )( const size_t ) ) final override;
     Aurora::Memory::Status writeProtect( const bool enable, const Aurora::Memory::Chunk chunk, const size_t id ) final override;
     Aurora::Memory::Status readProtect( const bool enable, const Aurora::Memory::Chunk chunk, const size_t id ) final override;

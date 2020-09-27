@@ -15,6 +15,7 @@
 #include <Adesto/at25/at25_commands.hpp>
 #include <Adesto/at25/at25_constants.hpp>
 #include <Adesto/at25/at25_driver.hpp>
+#include <Adesto/at25/at25_register.hpp>
 #include <Adesto/at25/at25_types.hpp>
 
 /* Chimera Includes */
@@ -116,11 +117,11 @@ namespace Adesto::AT25
 
     // Tell the hardware which address to write into
     mSPI->writeBytes( cmdBuffer.data(), Command::PAGE_PROGRAM_OPS_LEN );
-    mSPI->await( Chimera::Event::Trigger::TRIGGER_WRITE_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
 
     // Dump the data
     mSPI->writeBytes( data, length );
-    mSPI->await( Chimera::Event::Trigger::TRIGGER_WRITE_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
 
     // Release the SPI and disable the memory chip
     mSPI->setChipSelect( Chimera::GPIO::State::HIGH );
@@ -167,11 +168,11 @@ namespace Adesto::AT25
 
     // Tell the hardware which address to read from
     mSPI->writeBytes( cmdBuffer.data(), Command::READ_ARRAY_HS_OPS_LEN );
-    mSPI->await( Chimera::Event::Trigger::TRIGGER_WRITE_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
 
     // Pull out all the data
     mSPI->readBytes( data, length );
-    mSPI->await( Chimera::Event::Trigger::TRIGGER_READ_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
 
     mSPI->setChipSelect( Chimera::GPIO::State::HIGH );
     mSPI->unlock();
@@ -278,7 +279,7 @@ namespace Adesto::AT25
     mSPI->lock();
     spiResult |= mSPI->setChipSelect( Chimera::GPIO::State::LOW );
     spiResult |= mSPI->readWriteBytes( cmdBuffer.data(), cmdBuffer.data(), eraseOpsLen );
-    spiResult |= mSPI->await( Chimera::Event::Trigger::TRIGGER_WRITE_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    spiResult |= mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
     spiResult |= mSPI->setChipSelect( Chimera::GPIO::State::HIGH );
     mSPI->unlock();
 
@@ -345,8 +346,99 @@ namespace Adesto::AT25
   }
 
 
+  Aurora::Memory::Status Driver::eraseChip()
+  {
+    /*-------------------------------------------------
+    Per datasheet specs, the write enable command must
+    be sent before issuing the actual data.
+    -------------------------------------------------*/
+    issueWriteEnable();
+
+    /*-------------------------------------------------
+    Perform the SPI transaction
+    -------------------------------------------------*/
+    auto spiResult = Chimera::Status::OK;
+
+    mSPI->lock();
+    spiResult |= mSPI->setChipSelect( Chimera::GPIO::State::LOW );
+    spiResult |= mSPI->writeBytes( &Command::CHIP_ERASE, Command::CHIP_ERASE_OPS_LEN );
+    spiResult |= mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    spiResult |= mSPI->setChipSelect( Chimera::GPIO::State::HIGH );
+    mSPI->unlock();
+
+    /*-------------------------------------------------
+    Release access to this driver
+    -------------------------------------------------*/
+    if ( spiResult == Chimera::Status::OK )
+    {
+      return Aurora::Memory::Status::ERR_OK;
+    }
+    else
+    {
+      return Aurora::Memory::Status::ERR_DRIVER_ERR;
+    }
+  }
+
+
   Aurora::Memory::Status Driver::flush()
   {
+    return Aurora::Memory::Status::ERR_OK;
+  }
+
+  Aurora::Memory::Status Driver::pendEvent( const Aurora::Memory::Event event, const size_t timeout )
+  {
+    /*-------------------------------------------------
+    Decide the bits used to indicate events occurred.
+    -------------------------------------------------*/
+    uint16_t eventBitMask = 0;  // Indicates bits to look at
+    size_t pollDelay      = 0;  // How long to wait between checks
+
+    switch( event )
+    {
+      case Aurora::Memory::Event::MEM_ERASE_COMPLETE:
+      case Aurora::Memory::Event::MEM_READ_COMPLETE:
+      case Aurora::Memory::Event::MEM_WRITE_COMPLETE:
+        eventBitMask = Register::SR_RDY_BUSY;
+        pollDelay    = Chimera::Threading::TIMEOUT_5MS;
+        break;
+
+      default:
+        return Aurora::Memory::Status::ERR_UNSUPPORTED;
+        break;
+    };
+
+    /*-------------------------------------------------
+    For the AT25SF081, the device is busy when the
+    RDY/BSY flag is set. Assuming this extends to other
+    AT25 devices as well.
+
+    See Table 10-1 of device datasheet.
+    -------------------------------------------------*/
+    uint16_t statusRegister = readStatusRegister();
+    const size_t startTime  = Chimera::millis();
+
+    while ( statusRegister & eventBitMask )
+    {
+      /*-------------------------------------------------
+      Check for timeout, otherwise suspend this thread
+      and allow others to do something.
+      -------------------------------------------------*/
+      if( ( Chimera::millis() - startTime ) > timeout )
+      {
+        return Aurora::Memory::Status::ERR_TIMEOUT;
+        break;
+      }
+      else
+      {
+        Chimera::delayMilliseconds( pollDelay );
+      }
+
+      /*-------------------------------------------------
+      Poll the latest info
+      -------------------------------------------------*/
+      statusRegister = readStatusRegister();
+    };
+
     return Aurora::Memory::Status::ERR_OK;
   }
 
@@ -449,7 +541,7 @@ namespace Adesto::AT25
     mSPI->lock();
     spiResult |= mSPI->setChipSelect( Chimera::GPIO::State::LOW );
     spiResult |= mSPI->readWriteBytes( cmdBuffer.data(), cmdBuffer.data(), Command::READ_DEV_INFO_OPS_LEN );
-    spiResult |= mSPI->await( Chimera::Event::Trigger::TRIGGER_WRITE_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    spiResult |= mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
     spiResult |= mSPI->setChipSelect( Chimera::GPIO::State::HIGH );
     mSPI->unlock();
 
@@ -501,7 +593,7 @@ namespace Adesto::AT25
     cmdBuffer[ 0 ] = Command::READ_SR_BYTE1;
     mSPI->setChipSelect( Chimera::GPIO::State::LOW );
     mSPI->readWriteBytes( cmdBuffer.data(), cmdBuffer.data(), Command::READ_SR_BYTE1_OPS_LEN );
-    mSPI->await( Chimera::Event::Trigger::TRIGGER_WRITE_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
     mSPI->setChipSelect( Chimera::GPIO::State::HIGH );
 
     result |= cmdBuffer[ 1 ];
@@ -511,7 +603,7 @@ namespace Adesto::AT25
     cmdBuffer[ 1 ] = 0;
     mSPI->setChipSelect( Chimera::GPIO::State::LOW );
     mSPI->readWriteBytes( cmdBuffer.data(), cmdBuffer.data(), Command::READ_SR_BYTE2_OPS_LEN );
-    mSPI->await( Chimera::Event::Trigger::TRIGGER_WRITE_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    mSPI->await( Chimera::Event::Trigger::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
     mSPI->setChipSelect( Chimera::GPIO::State::HIGH );
 
     result |= ( cmdBuffer[ 1 ] << 8 );
@@ -532,8 +624,10 @@ namespace Adesto::AT25
   void Driver::issueWriteEnable()
   {
     mSPI->lock();
+    mSPI->setChipSelect( Chimera::GPIO::State::LOW );
     mSPI->writeBytes( &Command::WRITE_ENABLE, Command::WRITE_ENABLE_OPS_LEN );
-    mSPI->await( Chimera::Event::TRIGGER_WRITE_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    mSPI->await( Chimera::Event::TRIGGER_TRANSFER_COMPLETE, Chimera::Threading::TIMEOUT_BLOCK );
+    mSPI->setChipSelect( Chimera::GPIO::State::HIGH );
     mSPI->unlock();
   }
 }  // namespace Adesto::AT25

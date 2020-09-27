@@ -24,7 +24,6 @@ namespace Adesto::AT25::Register
   static constexpr size_t SR_RDY_BUSY_POS = 0;
   static constexpr size_t SR_RDY_BUSY_MSK = 0x01;
   static constexpr size_t SR_RDY_BUSY     = SR_RDY_BUSY_MSK << SR_RDY_BUSY_POS;
-
 }  // namespace Adesto::AT25
 
 #endif  /* !ADESTO_AT25_REGISTER_HPP */

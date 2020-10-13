@@ -6,7 +6,8 @@ set(LINK_LIBS
   aurora_inc
   Boost::boost
   chimera_inc       # Chimera public headers
-  prj_device_target # Compiler options for target device
+  prj_device_target
+  prj_build_target # Compiler options for target device
 )
 
 # ====================================================
